@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Para garantir que pega outros formatos
+app.use(express.urlencoded({ extended: true }));
 
 // CONFIG UTMify
 const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
@@ -21,16 +21,16 @@ app.post("/webhook/pagueeasy", async (req, res) => {
     console.log("Body:", req.body);
 
     try {
-        const { id, status, amount, customer } = req.body;
+        const { paymentId, externalId, status, totalValue, customer } = req.body;
 
-        if (!id) {
-            console.warn("⚠️ ID não recebido no webhook!");
-            return res.status(400).json({ error: "ID não encontrado no payload" });
+        if (!paymentId) {
+            console.warn("⚠️ paymentId não recebido no webhook!");
+            return res.status(400).json({ error: "paymentId não encontrado no payload" });
         }
 
         if (status === "APPROVED") {
             const body = {
-                orderId: id.toString(),
+                orderId: paymentId.toString(), // Agora usamos o paymentId
                 platform: "FreeFireCheckout",
                 paymentMethod: "pix",
                 status: "paid",
@@ -47,13 +47,13 @@ app.post("/webhook/pagueeasy", async (req, res) => {
                         id: "recarga-ff",
                         name: "Recarga Free Fire",
                         quantity: 1,
-                        priceInCents: amount || 0
+                        priceInCents: totalValue || 0
                     }
                 ],
                 commission: {
-                    totalPriceInCents: amount || 0,
+                    totalPriceInCents: totalValue || 0,
                     gatewayFeeInCents: 0,
-                    userCommissionInCents: amount || 0
+                    userCommissionInCents: totalValue || 0
                 },
                 isTest: false
             };
