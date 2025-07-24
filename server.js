@@ -3,6 +3,7 @@ import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Para garantir que pega outros formatos
 
 // CONFIG UTMify
 const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
@@ -15,10 +16,17 @@ app.get("/", (req, res) => {
 
 // Rota que PagueEasy vai chamar
 app.post("/webhook/pagueeasy", async (req, res) => {
-    console.log("Webhook recebido:", req.body);
+    console.log("=== Webhook recebido ===");
+    console.log("Headers:", req.headers);
+    console.log("Body:", req.body);
 
     try {
         const { id, status, amount, customer } = req.body;
+
+        if (!id) {
+            console.warn("⚠️ ID não recebido no webhook!");
+            return res.status(400).json({ error: "ID não encontrado no payload" });
+        }
 
         if (status === "APPROVED") {
             const body = {
@@ -39,13 +47,13 @@ app.post("/webhook/pagueeasy", async (req, res) => {
                         id: "recarga-ff",
                         name: "Recarga Free Fire",
                         quantity: 1,
-                        priceInCents: amount
+                        priceInCents: amount || 0
                     }
                 ],
                 commission: {
-                    totalPriceInCents: amount,
+                    totalPriceInCents: amount || 0,
                     gatewayFeeInCents: 0,
-                    userCommissionInCents: amount
+                    userCommissionInCents: amount || 0
                 },
                 isTest: false
             };
