@@ -8,6 +8,11 @@ app.use(express.json());
 const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
 const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // <-- Coloque o token real
 
+// Rota para testar se o servidor está online
+app.get("/", (req, res) => {
+    res.send("Servidor online e rodando!");
+});
+
 // Rota que PagueEasy vai chamar
 app.post("/webhook/pagueeasy", async (req, res) => {
     console.log("Webhook recebido:", req.body);
@@ -15,7 +20,6 @@ app.post("/webhook/pagueeasy", async (req, res) => {
     try {
         const { id, status, amount, customer } = req.body;
 
-        // Só processa compra aprovada
         if (status === "APPROVED") {
             const body = {
                 orderId: id.toString(),
@@ -46,7 +50,6 @@ app.post("/webhook/pagueeasy", async (req, res) => {
                 isTest: false
             };
 
-            // Envia para UTMify
             const response = await fetch(UTMIFY_URL, {
                 method: "POST",
                 headers: {
@@ -60,12 +63,13 @@ app.post("/webhook/pagueeasy", async (req, res) => {
             console.log("UTMify resposta:", result);
         }
 
-        res.sendStatus(200);
+        res.status(200).json({ message: "Webhook processado com sucesso" });
     } catch (error) {
         console.error("Erro no webhook:", error);
-        res.sendStatus(500);
+        res.status(500).json({ error: "Erro interno" });
     }
 });
 
-// Inicia servidor
-app.listen(3000, () => console.log("Servidor rodando na porta 3000"));
+// Porta dinâmica do Render
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
