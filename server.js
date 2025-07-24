@@ -30,10 +30,11 @@ app.post("/webhook/pagueeasy", async (req, res) => {
 
         if (status === "APPROVED") {
             const body = {
-                orderId: paymentId.toString(), // Agora usamos o paymentId
+                orderId: paymentId.toString(), 
                 platform: "FreeFireCheckout",
                 paymentMethod: "pix",
                 status: "paid",
+                createdAt: new Date().toISOString().slice(0, 19).replace('T', ' '), // Obrigatório
                 approvedDate: new Date().toISOString().slice(0, 19).replace('T', ' '),
                 customer: {
                     name: customer?.name || "Cliente",
@@ -47,13 +48,22 @@ app.post("/webhook/pagueeasy", async (req, res) => {
                         id: "recarga-ff",
                         name: "Recarga Free Fire",
                         quantity: 1,
-                        priceInCents: totalValue || 0
+                        priceInCents: totalValue || 0,
+                        planId: "basic",          // Adicionado - Obrigatório
+                        planName: "Plano Básico"  // Adicionado - Obrigatório
                     }
                 ],
                 commission: {
                     totalPriceInCents: totalValue || 0,
                     gatewayFeeInCents: 0,
                     userCommissionInCents: totalValue || 0
+                },
+                trackingParameters: {   // Adicionado - Obrigatório
+                    utm_campaign: "",
+                    utm_content: "",
+                    utm_medium: "",
+                    utm_source: "",
+                    utm_term: ""
                 },
                 isTest: false
             };
