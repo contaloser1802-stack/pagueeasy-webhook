@@ -1,15 +1,11 @@
 // server.js
-// Altere 'require' para 'import'
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
-import pkg from "pg"; // <-- Importe o pacote 'pg' dessa forma
-const { Pool } = pkg; // <-- Desestruture 'Pool' de 'pkg'
+import pkg from "pg";
+const { Pool } = pkg;
 
 const app = express();
-
-// Se você removeu require("dotenv").config(); no passo anterior, mantenha removido.
-// Se você não usa .env localmente, não precisa dela.
 
 const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
 const BUCK_PAY_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
@@ -26,7 +22,7 @@ if (!DATABASE_URL) {
 
 // Middlewares
 app.use(cors({
-    origin: 'https://freefirereward.site', // Coloque APENAS a URL exata do seu frontend aqui
+    origin: 'https://freefirereward.site',
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -61,6 +57,7 @@ app.get("/my-server-ip", async (req, res) => {
 });
 
 app.post("/create-payment", async (req, res) => {
+    // Desestrutura os dados do frontend
     const { amount, email, name, document, phone, product_id, product_name, offer_id, offer_name, discount_price, quantity, tracking } = req.body;
 
     if (!amount || !email || !name) {
@@ -70,20 +67,79 @@ app.post("/create-payment", async (req, res) => {
     const externalId = `order_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
     console.log(`Gerando pagamento para ${email} com externalId: ${externalId}`);
 
+    // --- CORREÇÕES APLICADAS AQUI ---
+
+    // 1. amount: Convertendo para centavos e inteiro
+    const amountInCents = Math.round(parseFloat(amount) * 100);
+    if (isNaN(amountInCents) || amountInCents < 500) { // Mínimo de 500 centavos (R$5,00)
+        return res.status(400).json({ error: "Valor de pagamento inválido ou abaixo do mínimo de R$5,00." });
+    }
+
+    // 2. phone: Limpeza e validação
+    const cleanPhone = phone ? phone.replace(/\D/g, '').substring(0, 13) : ''; // Remove não-dígitos e limita a 13 chars
+    if (!/^\d{10,13}$/.test(cleanPhone)) { // Valida se tem entre 10 e 13 dígitos
+        console.warn(`Número de telefone inválido recebido: ${phone}. Usando default ou removendo.`);
+        // Dependendo da sua necessidade, você pode:
+        // A) Retornar erro: return res.status(400).json({ error: "Número de telefone inválido. Apenas números, 10-13 dígitos." });
+        // B) Usar um valor padrão: cleanPhone = "5511999999999";
+        // C) Remover o campo: buyer.phone = undefined;
+        // Por agora, vamos apenas garantir que ele seja só números e tenha um tamanho razoável.
+    }
+
+
+    // 3. offer: Condição mais explícita para o objeto 'offer'
+    let offerPayload = null;
+    if (offer_id && offer_name && discount_price !== null && discount_price !== undefined) {
+        offerPayload = {
+            id: offer_id,
+            name: offer_name,
+            discount_price: Math.round(parseFloat(discount_price) * 100), // Enviar em centavos
+            quantity: quantity || 1 // Garantir que quantity exista
+        };
+    }
+
+    // 4. tracking: Mapeando para os campos esperados pela BuckPay
+    // Assumindo que o `tracking` do frontend já é um objeto como { utm_source: "...", xcod: "...", cid: "...", etc. }
+    let buckpayTracking = {};
+    if (tracking) {
+        // Mapeie seus parâmetros internos para os nomes da BuckPay
+        // Exemplo de mapeamento, ajuste conforme o nome exato que a BuckPay exige
+        buckpayTracking.ref = tracking.cid || externalId; // 'ref' pode ser seu CID ou externalId
+        buckpayTracking.src = tracking.utm_source || 'direct'; // 'src' pode ser utm_source
+        buckpayTracking.sck = tracking.sck || ''; // 'sck' do frontend
+        buckpayTracking.utm_id = tracking.utm_campaign || ''; // 'utm_id' pode ser utm_campaign
+        buckpayTracking.utm_term = tracking.utm_term || '';
+        buckpayTracking.utm_content = tracking.utm_content || '';
+        // Adicione outros campos de tracking que a BuckPay possa pedir
+    }
+    // Se a BuckPay realmente exige esses campos e eles podem vir vazios do frontend,
+    // você precisa garantir que eles existam no objeto `buckpayTracking`
+    // com um valor padrão, mesmo que seja uma string vazia.
+    if (!buckpayTracking.ref) buckpayTracking.ref = externalId;
+    if (!buckpayTracking.src) buckpayTracking.src = 'direct_access'; // Default caso utm_source seja nulo
+    if (!buckpayTracking.sck) buckpayTracking.sck = 'no_sck';
+    if (!buckpayTracking.utm_id) buckpayTracking.utm_id = 'no_campaign';
+    if (!buckpayTracking.utm_term) buckpayTracking.utm_term = 'no_term';
+    if (!buckpayTracking.utm_content) buckpayTracking.utm_content = 'no_content';
+
+
     const payload = {
         external_id: externalId,
         payment_method: "pix",
-        amount: amount,
+        amount: amountInCents, // Usar o valor corrigido
         buyer: {
             name: name,
             email: email,
             document: document,
-            phone: phone
+            phone: cleanPhone // Usar o telefone limpo
         },
         product: product_id && product_name ? { id: product_id, name: product_name } : null,
-        offer: offer_id && offer_name ? { id: offer_id, name: offer_name, discount_price: discount_price, quantity: quantity } : null,
-        tracking: tracking ? tracking : null
+        offer: offerPayload, // Usar o payload de oferta corrigido
+        tracking: buckpayTracking // Usar o tracking mapeado
     };
+
+    console.log("Payload FINAL enviado para BuckPay:", JSON.stringify(payload, null, 2));
+
 
     let client;
     try {
@@ -119,7 +175,7 @@ app.post("/create-payment", async (req, res) => {
                     VALUES ($1, $2, $3, $4, NOW(), NOW())
                     RETURNING id;
                 `;
-                const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]);
+                const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]); // Salva o 'amount' original para referência, se quiser
                 console.log(`Transação ${externalId} salva no DB com ID interno: ${resDb.rows[0].id}`);
             } catch (dbError) {
                 console.error(`❌ Erro ao salvar transação ${externalId} no DB:`, dbError);
