@@ -184,18 +184,18 @@ app.post("/webhook/buckpay", async (req, res) => {
         console.log(`Webhook BuckPay - Transação ID: ${transactionId}, Evento: ${eventType}, Status: ${status}`);
 
         // Verifica se a data.created_at é válida antes de usá-la
-let createdAt;
-try {
-    createdAt = new Date(data.created_at);
-    if (isNaN(createdAt.getTime())) {
-        throw new Error("Data inválida");
-    }
-} catch (error) {
-    console.error("Erro ao processar created_at:", error);
-    createdAt = new Date();  // Usa a data atual em caso de erro
-}
-const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
+        let createdAt;
+        try {
+            createdAt = new Date(data.created_at);
+            if (isNaN(createdAt.getTime())) {
+                throw new Error("Data inválida");
+            }
+        } catch (error) {
+            console.error("Erro ao processar created_at:", error);
+            createdAt = new Date();  // Usa a data atual em caso de erro
+        }
 
+        const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
 
         // O evento de venda paga é 'transaction.processed'
         if (eventType === "transaction.processed" && (status === "approved" || status === "paid")) {
