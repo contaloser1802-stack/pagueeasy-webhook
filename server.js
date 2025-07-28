@@ -10,7 +10,7 @@ const BUCK_PAY_CREATE_TRANSACTION_URL = process.env.BUCK_PAY_URL || "https://api
 
 // CONFIG UTMify
 const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
-const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // <-- Coloque o token real da UTMify
+const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // <-- Coloque o token REAL da UTMify AQUI
 
 if (!BUCK_PAY_API_KEY) {
     console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
@@ -39,8 +39,8 @@ function cleanupTransactionsInMemory() {
         // Remove transações que já não estão mais pendentes ou que passaram do tempo de vida na memória.
         // O status "pending" é o que esperamos monitorar. Qualquer outro status é considerado final para este fim.
         if (transactionInfo.status !== 'pending' || elapsedTimeMinutes > TRANSACTION_LIFETIME_MINUTES) {
-             pendingTransactions.delete(externalId);
-             console.log(`🧹 Transação ${externalId} (status: ${transactionInfo.status || 'sem status final'}) removida da memória após ${elapsedTimeMinutes.toFixed(0)} minutos.`);
+            pendingTransactions.delete(externalId);
+            console.log(`🧹 Transação ${externalId} (status: ${transactionInfo.status || 'sem status final'}) removida da memória após ${elapsedTimeMinutes.toFixed(0)} minutos.`);
         }
     }
 }
@@ -250,7 +250,19 @@ app.post("/webhook/buckpay", async (req, res) => {
                 console.log(`🎉 Pagamento ${externalIdFromWebhook} APROVADO pela BuckPay via webhook! Enviando para UTMify.`);
 
                 const customer = data.buyer || {};
-                const totalValue = data.amount; // Valor total em centavos
+                const totalValue = data.amount; // Valor total em centavos da BuckPay
+
+                // **INÍCIO DA LÓGICA DE AJUSTE PARA UTMify**
+                const gatewayFee = data.fees?.gateway_fee || 0;
+                let userCommission = totalValue - gatewayFee;
+
+                // Garante que userCommission seja pelo menos 1 centavo se o pagamento foi pago e totalValue > 0
+                // Isso resolve o erro "commission.userCommissionInCents is a required field"
+                // se a UTMify não aceita 0 ou valores negativos para comissão em pagamentos aprovados.
+                if (totalValue > 0 && userCommission <= 0) {
+                    userCommission = 1; // Define um mínimo de 1 centavo
+                }
+                // **FIM DA LÓGICA DE AJUSTE PARA UTMify**
 
                 // Monta o corpo da requisição para a UTMify
                 const bodyForUTMify = {
@@ -279,8 +291,8 @@ app.post("/webhook/buckpay", async (req, res) => {
                     ],
                     commission: {
                         totalPriceInCents: totalValue || 0,
-                        gatewayFeeInCents: data.fees?.gateway_fee || 0, // Ajuste para o campo correto de taxas da BuckPay
-                        userCommissionInCents: totalValue - (data.fees?.gateway_fee || 0) // Exemplo de cálculo da comissão
+                        gatewayFeeInCents: gatewayFee, // Usa o valor da taxa do gateway
+                        userCommissionInCents: userCommission // Usa o valor da comissão ajustado
                     },
                     trackingParameters: {
                         utm_campaign: data.tracking?.utm_campaign || "",
