@@ -171,69 +171,71 @@ app.post("/webhook/buckpay", async (req, res) => {
     try {
         const { event, data } = req.body;
 
-        // Verifica se o payload essencial está presente
         if (!event || !data || !data.id || !data.status) {
             console.warn("⚠️ Payload de webhook BuckPay inválido ou incompleto.");
             return res.status(400).json({ error: "Payload de webhook inválido" });
         }
 
-        const transactionId = data.id; // ID interno da BuckPay do webhook
+        const transactionId = data.id;
         const status = data.status;
         const eventType = event;
 
         console.log(`Webhook BuckPay - Transação ID: ${transactionId}, Evento: ${eventType}, Status: ${status}`);
 
-        // Verifica se a data.created_at é válida antes de usá-la
-        let createdAt;
-        try {
-            createdAt = new Date(data.created_at);
-            if (isNaN(createdAt.getTime())) {
-                throw new Error("Data inválida");
-            }
-        } catch (error) {
-            console.error("Erro ao processar created_at:", error);
-            createdAt = new Date();  // Usa a data atual em caso de erro
-        }
-
-        const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
+        // --- REMOVA OU AJUSTE ESTE BLOCO DE CÓDIGO ---
+        // Se 'data.created_at' não vem no payload, não tente usá-lo.
+        // let createdAt;
+        // try {
+        //     createdAt = new Date(data.created_at);
+        //     if (isNaN(createdAt.getTime())) {
+        //         throw new Error("Data inválida");
+        //     }
+        // } catch (error) {
+        //     console.error("Erro ao processar created_at:", error);
+        //     createdAt = new Date(); // Usa a data atual em caso de erro
+        // }
+        // const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
+        // --- FIM DO BLOCO A SER REMOVIDO/AJUSTADO ---
 
         // O evento de venda paga é 'transaction.processed'
         if (eventType === "transaction.processed" && (status === "approved" || status === "paid")) {
             console.log(`✅ Pagamento ${transactionId} aprovado na BuckPay. Enviando para UTMify.`);
 
-            const customer = data.buyer; // Webhook usa 'buyer' diretamente em 'data'
-            const totalValueInCents = data.total_amount; // Usar total_amount do webhook
+            const customer = data.buyer;
+            const totalValueInCents = data.total_amount;
             
-            // Lidar com produtos/ofertas do webhook. Adiciona um item padrão se não houver produtos.
             let items = [];
             if (data.product) {
                 items.push({ id: data.product.id, name: data.product.name, priceInCents: totalValueInCents, quantity: 1 });
             } else if (data.offer) {
                 items.push({ id: data.offer.id, name: data.offer.name, priceInCents: data.offer.discount_price, quantity: data.offer.quantity || 1 });
             } else {
-                // Se não houver produto ou oferta, adicionar um item padrão
                 items.push({ id: "default-item", name: "Recarga Free Fire", priceInCents: totalValueInCents, quantity: 1 });
             }
+
+            // USE A DATA DE APROVAÇÃO COMO REFERÊNCIA PRINCIPAL PARA O UTMify
+            const currentFormattedDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
             const utmifyBody = {
                 orderId: transactionId.toString(),
                 platform: "FreeFireCheckout",
                 paymentMethod: "pix",
                 status: "paid",
-                createdAt: formattedDate,  // Usando a data formatada corretamente
-                approvedDate: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                // Remova 'createdAt' se ele não vem no webhook para este evento, ou defina como a data de aprovação
+                createdAt: currentFormattedDate, // Usando a data atual como data de criação/aprovação
+                approvedDate: currentFormattedDate, // A data de aprovação é a data que o webhook foi recebido/processado
                 customer: {
                     name: customer?.name || "Cliente",
                     email: customer?.email || "cliente@teste.com",
                     phone: customer?.phone || "",
                     document: customer?.document || "",
                     country: "BR",
-                    ip: data?.ip_address || "" // IP address pode vir no objeto principal 'data' do webhook
+                    ip: data?.ip_address || ""
                 },
                 products: items.map(item => ({
                     id: item.id || "recarga-ff",
-                    planId: item.planId || "freefire-plan", // Placeholder se não estiver no webhook
-                    planName: item.name || "Plano Recarga", // Usando item.name para planName
+                    planId: item.planId || "freefire-plan",
+                    planName: item.name || "Plano Recarga",
                     name: item.name || "Recarga Free Fire",
                     quantity: item.quantity || 1,
                     priceInCents: item.priceInCents || 0
@@ -244,7 +246,7 @@ app.post("/webhook/buckpay", async (req, res) => {
                     userCommissionInCents: totalValueInCents || 0
                 },
                 trackingParameters: {
-                    utm_source: data.tracking?.utm_source || "",
+                    utm_source: data.tracking?.utm_source || "", // Se 'tracking' vier dentro de 'data'
                     utm_medium: data.tracking?.utm_medium || "",
                     utm_campaign: data.tracking?.utm_campaign || "",
                     utm_content: data.tracking?.utm_content || "",
@@ -252,6 +254,13 @@ app.post("/webhook/buckpay", async (req, res) => {
                 },
                 isTest: false
             };
+            
+            // Certifique-se de que `data.tracking` existe antes de tentar acessar suas propriedades.
+            // Pelo seu log anterior, 'tracking' pode não vir no payload da webhook.
+            // Você pode precisar buscar os dados de tracking do seu próprio banco de dados
+            // associados ao `externalId` se eles não vierem na webhook.
+            // Por enquanto, o código acima com `data.tracking?` já trata a ausência.
+
 
             const responseUtmify = await fetch(UTMIFY_URL, {
                 method: "POST",
