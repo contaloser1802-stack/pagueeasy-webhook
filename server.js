@@ -168,7 +168,7 @@ app.post("/webhook/buckpay", async (req, res) => {
     console.log("Headers:", req.headers);
     console.log("Body:", JSON.stringify(req.body, null, 2));
 
-      try {
+    try {
         const { event, data } = req.body;
 
         // Verifica se o payload essencial está presente
@@ -204,13 +204,15 @@ app.post("/webhook/buckpay", async (req, res) => {
             const customer = data.buyer; // Webhook usa 'buyer' diretamente em 'data'
             const totalValueInCents = data.total_amount; // Usar total_amount do webhook
             
+            // Lidar com produtos/ofertas do webhook. Adiciona um item padrão se não houver produtos.
             let items = [];
             if (data.product) {
                 items.push({ id: data.product.id, name: data.product.name, priceInCents: totalValueInCents, quantity: 1 });
             } else if (data.offer) {
                 items.push({ id: data.offer.id, name: data.offer.name, priceInCents: data.offer.discount_price, quantity: data.offer.quantity || 1 });
             } else {
-                items = data.metadata?.order_items || [];
+                // Se não houver produto ou oferta, adicionar um item padrão
+                items.push({ id: "default-item", name: "Recarga Free Fire", priceInCents: totalValueInCents, quantity: 1 });
             }
 
             const utmifyBody = {
