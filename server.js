@@ -69,7 +69,7 @@ app.post("/create-payment", async (req, res) => {
 
     // --- CORREÇÕES APLICADAS AQUI ---
 
-    // 1. amount: Convertendo para centavos e inteiro (já estava certo, só reconfirmando)
+    // 1. amount: Convertendo para centavos e inteiro
     const amountInCents = Math.round(parseFloat(amount) * 100);
     if (isNaN(amountInCents) || amountInCents < 500) { // Mínimo de 500 centavos (R$5,00)
         return res.status(400).json({ error: "Valor de pagamento inválido ou abaixo do mínimo de R$5,00." });
@@ -93,32 +93,10 @@ app.post("/create-payment", async (req, res) => {
 
 
     // 3. offer: SEMPRE enviar um objeto 'offer', mesmo que vazio ou com valores padrão
-    let offerPayload = {
-        id: offer_id || "", // Pode ser vazio se não houver ID real
-        name: offer_name || "", // Pode ser vazio se não houver nome real
-        discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0, // 0 se não houver desconto
-        quantity: quantity || 1
-    };
-    // Se não há offer_id ou offer_name, mas o discount_price é 0, faz mais sentido
-    // enviar um objeto offer com id e name vazios, mas sem discount_price
-    if (!offer_id && !offer_name && offerPayload.discount_price === 0) {
-        offerPayload = null; // Ou remova esta linha se a BuckPay realmente sempre espera um objeto
-                              // A mensagem "Expected object, received null" indica que ela *sempre* quer o objeto
-                              // Então, vamos manter o objeto com valores padrão, ou você pode remover esta linha `if (...) { offerPayload = null; }`
-                              // Se você tem certeza de que nunca terá uma oferta, pode simplificar para:
-                              // offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 };
-    }
-    // REVISÃO: Mantenha sempre o objeto, mesmo que vazio, para satisfazer "Expected object, received null"
-    // A única exceção é se "discount_price" for o gatilho. O erro é em "offer", não em "discount_price".
-    // Então, se não há oferta, o objeto `offer` deve ser `null` ou um objeto com campos padrão.
-    // Pelo erro, ele quer um objeto. Então, se `offer_id` e `offer_name` são nulos,
-    // o `offerPayload` ainda precisa ser um objeto.
-    // Vamos garantir que `offerPayload` seja SEMPRE um objeto se `offer_id` ou `offer_name` existir,
-    // caso contrário, um objeto vazio mas existente.
+    let offerPayload = null;
     if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
-        offerPayload = null; // Se não tem ID, nome E preço, então não é uma oferta de fato
-                             // No entanto, o erro 'Expected object, received null' sugere que mesmo assim
-                             // ele quer um objeto vazio. Vamos tentar enviar um objeto vazio aqui se não houver dados.
+        // Se não tem ID, nome E preço, então não é uma oferta de fato.
+        // Pelo erro "Expected object, received null", a BuckPay quer um objeto mesmo vazio.
         offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 }; // Envia um objeto vazio para satisfazer
     } else {
          // Se houver algum dado de oferta, preenche normalmente
@@ -131,30 +109,36 @@ app.post("/create-payment", async (req, res) => {
     }
 
 
-        // 4. tracking: Mapeando e GARANTINDO campos obrigatórios
-    let buckpayTracking = {}; // Esta variável já está definida acima
-    if (tracking) {
-        buckpayTracking.utm_source = tracking.utm_source || 'direct';
-        buckpayTracking.utm_medium = tracking.utm_medium || 'website';
-        buckpayTracking.utm_campaign = tracking.utm_campaign || 'no_campaign';
+    // 4. tracking: Mapeando e GARANTINDO campos obrigatórios para BuckPay, usando dados da Utmify
+    let buckpayTracking = {};
 
-        buckpayTracking.ref = tracking.cid || externalId;
-        buckpayTracking.sck = tracking.sck || 'no_sck_value';
-        buckpayTracking.xcod = tracking.xcod || 'no_xcod_value'; // <--- CORRIGIDO AQUI
-        buckpayTracking.utm_term = tracking.utm_term || '';
-        buckpayTracking.utm_content = tracking.utm_content || '';
-    } else {
-        buckpayTracking = {
-            utm_source: 'direct',
-            utm_medium: 'website',
-            utm_campaign: 'no_campaign',
-            ref: externalId,
-            sck: 'no_sck_value',
-            utm_term: '',
-            utm_content: '',
-            xcod: '', // <--- CORRIGIDO AQUI
-        };
-    }
+    // Campos que a BuckPay EXIGE e seus mapeamentos mais lógicos da Utmify
+    // Usamos o operador ?. (optional chaining) para acessar propriedades de tracking com segurança.
+
+    // utm_source, utm_medium, utm_campaign: Mapeamento direto (Utmify -> BuckPay)
+    buckpayTracking.utm_source = tracking?.utm_source || 'direct';
+    buckpayTracking.utm_medium = tracking?.utm_medium || 'website';
+    buckpayTracking.utm_campaign = tracking?.utm_campaign || 'no_campaign';
+
+    // src: BuckPay pede 'src'. Usamos utm_source como o mais próximo.
+    buckpayTracking.src = tracking?.utm_source || 'direct';
+
+    // utm_id: BuckPay pede 'utm_id'. O 'xcod' da Utmify (ID do Criativo) ou 'cid' (Click ID) são bons candidatos.
+    // Vou usar 'xcod' como padrão para utm_id da BuckPay, já que utm_campaign já está sendo usada.
+    // Se 'xcod' não vier, tentamos 'cid'. Se nada vier, usamos o externalId como fallback.
+    buckpayTracking.utm_id = tracking?.xcod || tracking?.cid || externalId;
+
+    // ref: BuckPay pede 'ref'. Usamos 'cid' da Utmify (Click ID) como o mais adequado.
+    buckpayTracking.ref = tracking?.cid || externalId;
+
+    // sck: BuckPay pede 'sck'. Mapeamento direto da Utmify.
+    buckpayTracking.sck = tracking?.sck || 'no_sck_value'; // Valor padrão para 'sck' se não vier
+
+    // Outros campos da Utmify que podem ser úteis para a BuckPay (ou ela ignora)
+    buckpayTracking.utm_term = tracking?.utm_term || '';
+    buckpayTracking.utm_content = tracking?.utm_content || '';
+    // O 'xcod' já está sendo usado para 'utm_id' da BuckPay. Se a BuckPay tiver um campo separado para 'xcod'
+    // você precisaria de outro campo, mas pelo erro ela só pediu 'utm_id'.
 
 
     const payload = {
