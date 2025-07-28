@@ -5,7 +5,7 @@ import cors from 'cors';
 const app = express();
 
 app.use(cors({
-    origin: ['https://freefirereward.site', 'http://localhost:3000', 'http://127.0.0.1:8080'], // Adicione esta linha
+    origin: ['https://freefirereward.site'], // Adicionar localhost para testes locais
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
