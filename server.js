@@ -1,19 +1,53 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch"; // 'node-fetch' é uma dependência que precisa ser instalada (npm install node-fetch)
+import fetch from "node-fetch";
 
 const app = express();
 
 const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
-// AJUSTE: A URL base da API BuckPay para criação de transações é /v1/transactions
-// A consulta de status usa /v1/transactions/external_id/:external_id
 const BUCK_PAY_CREATE_TRANSACTION_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
-const BUCK_PAY_CHECK_STATUS_BASE_URL = "https://api.realtechdev.com.br/v1/transactions/external_id"; // Nova base para consulta por external_id
+
+// CONFIG UTMify
+const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
+const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // <-- Coloque o token real da UTMify
 
 if (!BUCK_PAY_API_KEY) {
     console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
     process.exit(1);
 }
+
+// --- ARMAZENAMENTO TEMPORÁRIO EM MEMÓRIA ---
+// Chave: externalId
+// Valor: {
+//   createdAt: Date,
+//   buckpayId: string, // ID interno da BuckPay
+//   status: string (e.g., 'pending', 'paid', 'expired', 'refunded')
+// }
+const pendingTransactions = new Map();
+const TRANSACTION_LIFETIME_MINUTES = 35; // Pix expira em 30min na BuckPay. Guardar por 35-40min para garantir o webhook.
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Rodar limpeza a cada 5 minutos
+
+// Função para limpar transações expiradas ou finalizadas da memória
+function cleanupTransactionsInMemory() {
+    const now = new Date();
+    for (const [externalId, transactionInfo] of pendingTransactions.entries()) {
+        const elapsedTimeMinutes = (now.getTime() - transactionInfo.createdAt.getTime()) / (1000 * 60);
+
+        // Se a transação está em um status final (paga, reembolsada, cancelada/expirada)
+        // ou se passou do tempo de vida que decidimos manter na memória, remove.
+        // Isso é para lidar com o webhook que informa 'canceled' ou 'expired' após 30min.
+        if (transactionInfo.status !== 'pending' || elapsedTimeMinutes > TRANSACTION_LIFETIME_MINUTES) {
+             pendingTransactions.delete(externalId);
+             console.log(`🧹 Transação ${externalId} (${transactionInfo.status || 'sem status final'}) removida da memória após ${elapsedTimeMinutes.toFixed(0)} minutos.`);
+        }
+    }
+}
+
+// Inicia o processo de limpeza periódica
+setInterval(cleanupTransactionsInMemory, CLEANUP_INTERVAL_MS);
+console.log(`Limpeza de transações agendada a cada ${CLEANUP_INTERVAL_MS / 1000 / 60} minutos.`);
+// --- FIM DO ARMAZENAMENTO TEMPORÁRIO ---
+
 
 // Middlewares
 app.use(cors({
@@ -23,6 +57,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
     res.send("Servidor PagueEasy está online!");
@@ -55,28 +90,21 @@ app.post("/create-payment", async (req, res) => {
     }
 
     let cleanPhone = phone ? phone.replace(/\D/g, '') : '';
-    // Corrigindo a lógica do telefone para garantir 55 na frente e 10-11 dígitos após
     if (cleanPhone.length > 0 && !cleanPhone.startsWith('55')) {
-        // Assume que se não começa com 55, é um número local. Tenta adicionar 55 e DDD
-        // Exemplo: se for 9 dígitos (9XXXX-YYYY), assume DDD 11
-        if (cleanPhone.length === 9) { // Ex: 987654321
+        if (cleanPhone.length === 9) {
             cleanPhone = `5511${cleanPhone}`;
-        } else if (cleanPhone.length === 10 || cleanPhone.length === 11) { // Ex: 11987654321 ou 1187654321
+        } else if (cleanPhone.length === 10 || cleanPhone.length === 11) {
             cleanPhone = `55${cleanPhone}`;
         }
     }
-    // Caso ainda esteja curto ou seja um número totalmente inválido, usa fallback
-    if (cleanPhone.length < 12) { // 55 + DDD (2 digitos) + Telefone (8 ou 9 digitos) = 12 ou 13
-        cleanPhone = "5511987654321"; // Telefone padrão de fallback
+    if (cleanPhone.length < 12) {
+        cleanPhone = "5511987654321";
     }
-    cleanPhone = cleanPhone.substring(0, 13); // Garante que não exceda o limite de 13 (55DD9XXXXXXXX)
+    cleanPhone = cleanPhone.substring(0, 13);
 
 
     let offerPayload = null;
     if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
-        // Se nenhuma informação de oferta foi fornecida, envia null ou um objeto vazio conforme a necessidade da API Buckpay.
-        // A documentação diz "Objeto ou null" para 'offer', mas as sub-propriedades são "Sim String ou null".
-        // Para evitar erros de validação na Buckpay, é mais seguro enviar null se não houver dados válidos.
         offerPayload = null;
     } else {
         offerPayload = {
@@ -92,7 +120,6 @@ app.post("/create-payment", async (req, res) => {
     buckpayTracking.utm_medium = tracking?.utm_medium || 'website';
     buckpayTracking.utm_campaign = tracking?.utm_campaign || 'no_campaign';
     buckpayTracking.src = tracking?.utm_source || 'direct';
-    // É importante que o utm_id e ref contenham o externalId para que você possa recuperá-lo no webhook
     buckpayTracking.utm_id = tracking?.xcod || tracking?.cid || externalId;
     buckpayTracking.ref = tracking?.cid || externalId;
     buckpayTracking.sck = tracking?.sck || 'no_sck_value';
@@ -117,7 +144,7 @@ app.post("/create-payment", async (req, res) => {
     console.log("Payload FINAL enviado para BuckPay:", JSON.stringify(payload, null, 2));
 
     try {
-        const response = await fetch(BUCK_PAY_CREATE_TRANSACTION_URL, { // Usando a URL específica para criação
+        const response = await fetch(BUCK_PAY_CREATE_TRANSACTION_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -142,6 +169,15 @@ app.post("/create-payment", async (req, res) => {
         console.log("Resposta da BuckPay:", JSON.stringify(data, null, 2));
 
         if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
+            // --- NOVO: Armazena a transação em memória ---
+            pendingTransactions.set(externalId, {
+                createdAt: new Date(),
+                buckpayId: data.data.id, // Armazena o ID da BuckPay
+                status: 'pending' // Inicialmente pendente
+            });
+            console.log(`Transação ${externalId} (BuckPay ID: ${data.data.id}) registrada em memória como 'pending'.`);
+            // --- FIM DO NOVO BLOCO ---
+
             res.status(200).json({
                 pix: {
                     code: data.data.pix.code,
@@ -165,9 +201,6 @@ app.post("/webhook/buckpay", async (req, res) => {
     const event = req.body.event;
     const data = req.body.data;
 
-    // --- CORREÇÃO PRINCIPAL AQUI ---
-    // O external_id no webhook não vem como 'data.external_id' diretamente.
-    // Ele vem dentro do objeto 'tracking', como 'tracking.ref' ou 'tracking.utm.id'.
     let externalIdFromWebhook = null;
     if (data && data.tracking) {
         if (data.tracking.ref) {
@@ -176,64 +209,125 @@ app.post("/webhook/buckpay", async (req, res) => {
             externalIdFromWebhook = data.tracking.utm.id;
         }
     }
-    // --- FIM DA CORREÇÃO ---
 
     console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${externalIdFromWebhook}'`);
 
-    // **IMPORTANTE:** Se você planeja persistir o status da transação em um banco de dados
-    // em algum momento, este é o lugar onde você usaria o `externalIdFromWebhook`
-    // para encontrar a transação correspondente no seu DB e atualizar o status (`data.status`).
+    // --- ATUALIZADO: Atualiza o status da transação em memória e processa se pago ---
+    if (externalIdFromWebhook) {
+        const transactionInfo = pendingTransactions.get(externalIdFromWebhook);
+        if (transactionInfo) {
+            transactionInfo.status = data.status; // Atualiza o status recebido do webhook
+            transactionInfo.buckpayId = data.id; // Garante que o ID da BuckPay está salvo
+
+            console.log(`Status da transação ${externalIdFromWebhook} atualizado em memória para '${data.status}'.`);
+
+            // --- Lógica para UTMify apenas se o pagamento for aprovado ---
+            if (data.status === 'paid') {
+                console.log(`🎉 Pagamento ${externalIdFromWebhook} APROVADO pela BuckPay via webhook! Enviando para UTMify.`);
+
+                const customer = data.buyer || {};
+                const totalValue = data.amount; // Valor total em centavos
+
+                const bodyForUTMify = {
+                    orderId: externalIdFromWebhook,
+                    platform: "FreeFireCheckout",
+                    paymentMethod: "pix",
+                    status: "paid",
+                    createdAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    approvedDate: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                    customer: {
+                        name: customer?.name || "Cliente",
+                        email: customer?.email || "cliente@teste.com",
+                        phone: customer?.phone || "",
+                        document: customer?.document || "",
+                        country: "BR"
+                    },
+                    products: [
+                        {
+                            id: data.product?.id || "recarga-ff",
+                            name: data.product?.name || "Recarga Free Fire",
+                            quantity: data.offer?.quantity || 1,
+                            priceInCents: totalValue || 0,
+                            planId: data.offer?.id || "basic",
+                            planName: data.offer?.name || "Plano Básico"
+                        }
+                    ],
+                    commission: {
+                        totalPriceInCents: totalValue || 0,
+                        gatewayFeeInCents: data.fees?.gateway_fee || 0,
+                        userCommissionInCents: totalValue - (data.fees?.gateway_fee || 0)
+                    },
+                    trackingParameters: {
+                        utm_campaign: data.tracking?.utm_campaign || "",
+                        utm_content: data.tracking?.utm_content || "",
+                        utm_medium: data.tracking?.utm_medium || "",
+                        utm_source: data.tracking?.utm_source || "",
+                        utm_term: data.tracking?.utm_term || ""
+                    },
+                    isTest: false
+                };
+
+                try {
+                    const responseUTMify = await fetch(UTMIFY_URL, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-api-token": UTMIFY_TOKEN
+                        },
+                        body: JSON.stringify(bodyForUTMify)
+                    });
+
+                    const resultUTMify = await responseUTMify.json();
+                    console.log("UTMify resposta:", resultUTMify);
+                } catch (utmifyError) {
+                    console.error("Erro ao enviar dados para UTMify:", utmifyError);
+                }
+            } else if (data.status === 'refunded' || data.status === 'canceled' || data.status === 'expired') {
+                console.log(`💔 Pagamento ${externalIdFromWebhook} status final: ${data.status}. Nenhuma ação na UTMify.`);
+            }
+
+        } else {
+            console.warn(`Webhook para externalId ${externalIdFromWebhook} recebido, mas transação não encontrada em memória. Pode ser um reinício do servidor ou transação antiga.`);
+        }
+    }
+    // --- FIM DA ATUALIZAÇÃO ---
 
     res.status(200).send("Webhook recebido com sucesso!");
 });
 
-// NOVA ROTA: Consulta o status da transação diretamente na BuckPay
+// Rota de Consulta de Status para o Frontend (Lendo APENAS da MEMÓRIA)
 app.get("/check-order-status", async (req, res) => {
-    const externalId = req.query.id; // O frontend deve passar o `externalId` que você gerou
+    const externalId = req.query.id;
 
     if (!externalId) {
         return res.status(400).json({ error: "ID externo da transação não fornecido." });
     }
 
-    try {
-        // --- CORREÇÃO PRINCIPAL AQUI ---
-        // Construindo a URL de consulta de status conforme a documentação:
-        // GET /v1/transactions/external_id/:external_id
-        const BUCK_PAY_STATUS_URL = `${BUCK_PAY_CHECK_STATUS_BASE_URL}/${externalId}`;
-        // --- FIM DA CORREÇÃO ---
+    const transactionInfo = pendingTransactions.get(externalId);
+    const now = new Date();
 
-        console.log(`Tentando consultar status na BuckPay na URL: ${BUCK_PAY_STATUS_URL}`);
+    if (transactionInfo) {
+        const elapsedTimeMinutes = (now.getTime() - transactionInfo.createdAt.getTime()) / (1000 * 60);
 
-        const response = await fetch(BUCK_PAY_STATUS_URL, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
-                "User-Agent": "Buckpay API Status Check" // Diferenciando o User-Agent se desejar
-            }
-        });
-
-        if (!response.ok) {
-            const errorDetails = await response.text();
-            console.error(`Erro ao consultar status na BuckPay (HTTP status ${response.status}):`, errorDetails);
-            return res.status(response.status).json({
-                success: false,
-                error: "Erro ao consultar status na BuckPay.",
-                details: errorDetails
-            });
+        // Se a transação estiver pendente e o tempo de vida do Pix (30min) já passou,
+        // marca como expirada *em memória* e informa o frontend.
+        if (transactionInfo.status === 'pending' && elapsedTimeMinutes > 30) {
+            transactionInfo.status = 'expired'; // Marca como expirada
+            console.log(`Transação ${externalId} marcada como 'expired' em memória (tempo de Pix excedido).`);
+            return res.status(200).json({ success: true, status: 'expired' });
         }
 
-        const data = await response.json();
-        // O retorno da consulta GET /v1/transactions/external_id/:external_id também tem o status dentro de 'data'
-        const statusFromBuckPay = data.data?.status || 'unknown';
+        // Retorna o status atual da transação em memória
+        console.log(`Retornando status em memória para ${externalId}: ${transactionInfo.status}`);
+        return res.status(200).json({ success: true, status: transactionInfo.status });
 
-        console.log(`Status BuckPay para ${externalId}:`, statusFromBuckPay);
-
-        res.status(200).json({ success: true, status: statusFromBuckPay });
-
-    } catch (error) {
-        console.error("Erro ao consultar status da BuckPay:", error);
-        res.status(500).json({ success: false, error: "Erro interno ao consultar status." });
+    } else {
+        // Se a transação não foi encontrada em memória, pode ser que:
+        // 1. Ela já foi paga/expirada e removida pela limpeza agendada.
+        // 2. O servidor reiniciou e o Map foi limpo.
+        // Em ambos os casos, não temos como saber o status sem um DB.
+        console.warn(`Consulta para externalId ${externalId}, mas transação NÃO ENCONTRADA EM MEMÓRIA.`);
+        return res.status(200).json({ success: true, status: 'not_found_or_expired' });
     }
 });
 
