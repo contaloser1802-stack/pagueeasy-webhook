@@ -262,8 +262,7 @@
         creditados diretamente na conta de jogo.
       </p>
       <div class="row">
-        <span>Preço</span
-        ><span><strong id="price-final">R$ 19,97</strong></span>
+        <span>Preço</span><span><strong id="price-final">R$ 19,97</strong></span>
       </div>
       <div class="row">
         <span>Método de pagamento</span><span><strong>Pix</strong></span>
@@ -384,104 +383,13 @@
       }
 
       // ====================
-      // Função Utmify (MANTIDA)
+      // FUNÇÃO enviarParaUtmify REMOVIDA DO FRONTEND
+      // Essa função agora é responsabilidade EXCLUSIVA do backend (server.js)
       // ====================
-      const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
-      const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // Substitua pelo token real
-
-      async function enviarParaUtmify(
-        orderId,
-        status,
-        total, // total aqui agora é o valor monetário (totalBase)
-        nome,
-        email,
-        telefone,
-        cpf
-      ) {
-        const body = {
-          orderId: orderId.toString(),
-          platform: "FreeFireCheckout",
-          paymentMethod: "pix",
-          status: status,
-          createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
-          approvedDate:
-            status === "paid"
-              ? new Date().toISOString().slice(0, 19).replace("T", " ")
-              : null,
-          refundedAt: null,
-          customer: {
-            name: nome,
-            email: email,
-            phone: telefone,
-            document: cpf,
-            ip: (
-              await fetch("https://api.ipify.org?format=json").then((res) =>
-                res.json()
-              )
-            ).ip, // <- PEGA IP REAL
-          },
-          products: [
-            {
-              id: "recarga-ff",
-              planId: "freefire-plan", // <- ADICIONADO
-              planName: "Plano Recarga", // <- ADICIONADO
-              name: "Recarga Free Fire",
-              quantity: 1,
-              priceInCents: Math.round(total * 100),
-            },
-          ],
-          trackingParameters: {
-            utm_source: new URLSearchParams(window.location.search).get(
-              "utm_source"
-            ),
-            utm_campaign: new URLSearchParams(window.location.search).get(
-              "utm_campaign"
-            ),
-            utm_medium: new URLSearchParams(window.location.search).get(
-              "utm_medium"
-            ),
-            utm_content: new URLSearchParams(window.location.search).get(
-              "utm_content"
-            ),
-            utm_term: new URLSearchParams(window.location.search).get(
-              "utm_term"
-            ),
-          },
-          commission: {
-            totalPriceInCents: Math.round(total * 100),
-            gatewayFeeInCents: 0,
-            userCommissionInCents: Math.round(total * 100),
-          },
-          isTest: false,
-        };
-
-        try {
-          const response = await fetch(UTMIFY_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-token": UTMIFY_TOKEN,
-            },
-            body: JSON.stringify(body),
-          });
-          const result = await response.json();
-          console.log("UTMify resposta:", result);
-          if (!response.ok) {
-            alert("Erro ao enviar para UTMify: " + JSON.stringify(result));
-          }
-        } catch (e) {
-          console.error("Erro ao conectar na UTMify:", e);
-        }
-      }
 
       // NOVO: Definindo monitorarPagamento (AJUSTADO PARA A NOVA ROTA)
       async function monitorarPagamento(
-        transactionId,
-        totalBase, // Passar o valor real da transação
-        nome,
-        email,
-        telefone,
-        cpf
+        transactionId // Não precisa mais passar totalBase, nome, email, etc., pois o backend já tem isso.
       ) {
         // A NOVA ROTA DE CHECAGEM NO BACKEND É '/check-order-status'
         const API_STATUS_URL = `${window.BACKEND_URL}/check-order-status?id=${transactionId}`;
@@ -497,16 +405,8 @@
               clearInterval(interval);
               alert("Pagamento aprovado!");
 
-              // Envia para Utmify com status "paid"
-              enviarParaUtmify(
-                transactionId,
-                "paid",
-                totalBase, // Use o valor base real aqui
-                nome,
-                email,
-                telefone,
-                cpf
-              );
+              // *** REMOVIDO: CHAMADA ENVIARPARAUTFIMY DAQUI ***
+              // O backend já cuida disso via webhook da BuckPay
 
               // Redireciona após aprovado
               setTimeout(() => {
@@ -518,7 +418,8 @@
               data.status === "canceled" ||
               data.status === "refunded" ||
               data.status === "expired" ||
-              data.status === "failed" // Adiciona 'failed' da BuckPay
+              data.status === "failed" || // Adiciona 'failed' da BuckPay
+              data.status === "not_found_or_expired" // Adiciona status do backend se não encontrar
             ) {
               clearInterval(interval);
               alert(
@@ -533,7 +434,7 @@
             console.error("Erro ao monitorar pagamento:", e);
             // Silencia erros de polling para não sobrecarregar com alertas
           }
-        }, 30000); // Polling a cada 5 segundos
+        }, 30000); // Polling a cada 30 segundos (reduzido para não sobrecarregar)
       }
 
       // Função principal para criar transacao PIX (AJUSTADA PARA O NOVO BACKEND)
@@ -557,10 +458,6 @@
         if (!email) email = "cliente@freefire.com";
         const cpf = gerarCPF(); // Gera um CPF válido a cada transação
 
-        // O backend agora espera 'amount', 'product_id', 'product_name', 'offer_id', 'offer_name', 'discount_price', 'quantity'
-        // e um objeto 'tracking' com 'utm_source', etc.
-        // A lógica de 'items' não é mais necessária no frontend para o backend.
-
         let product_id = "recarga-ff"; // ID do produto principal
         let product_name = "Recarga Free Fire"; // Nome do produto principal
         let offer_id = ""; // Pode ser o ID do bump
@@ -569,14 +466,11 @@
         let quantity = 1;
 
         if (orderBumps.length > 0) {
-            // Se houver order bumps, vamos assumir que o primeiro bump é a "oferta"
-            // Se houver múltiplos, você pode adaptar para enviar um array ou somar.
-            // Para simplicidade, pegando o primeiro bump para a "offer" do BuckPay payload.
             const firstBump = orderBumps[0];
             offer_id = firstBump.id || "default_offer_id";
             offer_name = firstBump.name || "Oferta Adicional";
-            discount_price = firstBump.price || 0; // O preço do bump é o "desconto" ou valor da oferta
-            quantity = 1; // Quantidade da oferta
+            discount_price = firstBump.price || 0;
+            quantity = 1;
         }
 
         // UTM e outros parâmetros opcionais para o backend
@@ -589,22 +483,24 @@
             utm_term: urlParams.get("utm_term") || "",
             xcod: urlParams.get("xcod") || "",
             sck: urlParams.get("sck") || "",
-            // O CID do UTMify é gerenciado internamente pelo backend
+            cid: localStorage.getItem("utmify_cid") || "", // Adiciona o CID coletado pelo script da UTMify
         };
+
+        console.log("Tracking parameters enviados para o backend:", tracking);
 
 
         // Monta o payload para o seu backend, conforme o server.js espera
         const payload = {
-            amount: totalBase, // Agora o 'amount' é o 'totalBase'
+            amount: totalBase,
             email: email,
             name: nome,
             document: cpf,
-            phone: telefone, // Mantido como 'phone' no backend
+            phone: telefone,
             product_id: product_id,
             product_name: product_name,
             offer_id: offer_id,
             offer_name: offer_name,
-            discount_price: discount_price, // Preço do bump como discount_price
+            discount_price: discount_price,
             quantity: quantity,
             tracking: tracking, // Objeto de tracking
         };
@@ -628,16 +524,8 @@
             // AQUI: Pegue o transactionId da resposta do backend (é o external_id)
             const transactionId = data.transactionId;
 
-            // Envia para UTMify com o status "waiting_payment"
-            enviarParaUtmify(
-              transactionId, // Usar transactionId corretamente
-              "waiting_payment",
-              totalBase, // Passar o totalBase, que é o valor monetário
-              nome,
-              email,
-              telefone,
-              cpf
-            );
+            // *** REMOVIDO: CHAMADA ENVIARPARAUTFIMY DAQUI ***
+            // O backend é o ÚNICO responsável por enviar dados para a UTMify agora.
 
             const qrBase64 = data.pix.qrcode_base64; // QR code em base64
             const pixCopyCode = data.pix.code; // Código Pix que pode ser copiado
@@ -665,12 +553,7 @@
 
             // Inicia o monitoramento do pagamento
             monitorarPagamento(
-              transactionId, // Usar transactionId corretamente
-              totalBase, // Passar o totalBase
-              nome,
-              email,
-              telefone,
-              cpf
+              transactionId // Não precisa mais passar dados do cliente, apenas o ID da transação
             );
           } else {
             // Se a resposta não foi OK ou faltaram dados essenciais
