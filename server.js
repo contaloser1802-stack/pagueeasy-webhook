@@ -1,253 +1,227 @@
-import express from "express";
-import fetch from "node-fetch";
-import cors from 'cors';
+// server.js
+const express = require("express");
+const cors = require("cors");
+const fetch = require("node-fetch");
+const { Pool } = require("pg");
 
 const app = express();
 
+// --- REMOVA ESTA LINHA SE VOCÊ NÃO USA .env LOCALMENTE ---
+// require("dotenv").config();
+// --------------------------------------------------------
+
+const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
+const BUCK_PAY_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
+const DATABASE_URL = process.env.DATABASE_URL;
+
+// Verifica se as variáveis de ambiente estão configuradas (agora, elas virão SOMENTE do Render)
+if (!BUCK_PAY_API_KEY) {
+    console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
+    process.exit(1);
+}
+if (!DATABASE_URL) {
+    console.error("Erro: Variável de ambiente DATABASE_URL não configurada no Render.");
+    process.exit(1);
+}
+
+// Middlewares
 app.use(cors({
-    origin: ['https://freefirereward.site'], // Adicione APENAS a URL do seu frontend aqui
+    origin: 'https://freefirereward.site', // Coloque APENAS a URL exata do seu frontend aqui
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
-const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7";
-
-const BUCK_PAY_URL = "https://api.realtechdev.com.br/v1/transactions";
-const BUCK_PAY_API_KEY = "sk_live_69b0ed89aaa545ef5e67bfcef2c3e0c4";
-
-app.get("/", (req, res) => {
-    res.send("Servidor online e rodando!");
-});
-
-app.get("/my-server-ip", async (req, res) => {
-    try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        console.log("IP de saída do Render:", data.ip);
-        res.send(`IP de saída do seu servidor Render: ${data.ip}`);
-    } catch (err) {
-        res.status(500).send("Erro ao obter IP.");
+// Configuração do Pool de Conexões com o Banco de Dados
+const pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
     }
 });
 
-app.post("/create-payment", async (req, res) => {
-        console.log("Requisição recebida no endpoint /create-payment");
-
-    try {
-        const { email, telefone, nome, total, items, tracking, cpf } = req.body;
-
-        console.log("Valor de 'nome' recebido do frontend:", nome);
-
-        const externalId = `order_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-
-        const telefoneNumerico = telefone ? telefone.replace(/\D/g, '') : '';
-        const telefoneFormatado = telefoneNumerico.startsWith('55') ? telefoneNumerico : `55${telefoneNumerico}`;
-
-        const cpfNumerico = cpf ? cpf.replace(/\D/g, '') : '';
-
-
-        const payload = {
-            amount: Math.round(total * 100),
-            currency: "BRL",
-            payment_method: "pix",
-            external_id: externalId, // This is your generated external_id
-            buyer: {
-                name: nome,
-                email: email,
-                phone: telefoneFormatado,
-                document: cpfNumerico,
-            },
-            metadata: {
-                order_items: items,
-                utm_source: tracking?.utm?.source || "",
-                utm_medium: tracking?.utm?.medium || "",
-                utm_campaign: tracking?.utm?.campaign || "",
-                utm_content: tracking?.utm?.content || "",
-                utm_term: tracking?.utm?.term || "",
-                xcod: tracking?.xcod || "",
-                sck: tracking?.sck || "",
-                cid: "" // Este 'cid' parece ser o que vem do UTMify no frontend
-            }
-        };
-
-        console.log("Payload enviado para BuckPay:", JSON.stringify(payload, null, 2));
-
-const response = await fetch(BUCK_PAY_URL, {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
-        "User-Agent": "Buckpay API" // <-- ADICIONE ESTA LINHA AQUI!
-    },
-    body: JSON.stringify(payload)
+pool.on('error', (err) => {
+    console.error('Erro inesperado no cliente do DB:', err);
+    process.exit(-1);
 });
 
-if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error(`Erro ao consultar status da BuckPay (HTTP status ${response.status}):`, errorDetails);
-    return res.status(500).json({
-        success: false,
-        error: "Erro ao consultar status na BuckPay.",
-        details: errorDetails,
-        http_status: response.status
-    });
-}
-const data = await response.json();
-console.log("Resposta da BuckPay:", JSON.stringify(data, null, 2));
+// Rota de teste
+app.get("/", (req, res) => {
+    res.send("Servidor PagueEasy está online!");
+});
 
-// Verifique se a resposta contém os campos necessários
-if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
-    res.status(200).json({
-        pix: { 
-            code: data.data.pix.code,
-            qrcode_base64: data.data.pix.qrcode_base64
+// Rota para obter o IP do servidor (útil para debug)
+app.get("/my-server-ip", async (req, res) => {
+    try {
+        const response = await fetch("https://api.ipify.org?format=json");
+        const data = await response.json();
+        res.json({ ip: data.ip });
+    } catch (error) {
+        console.error("Erro ao obter IP:", error);
+        res.status(500).json({ error: "Erro ao obter IP do servidor" });
+    }
+});
+
+// Rota para criar um pagamento Pix
+app.post("/create-payment", async (req, res) => {
+    const { amount, email, name, document, phone, product_id, product_name, offer_id, offer_name, discount_price, quantity, tracking } = req.body;
+
+    if (!amount || !email || !name) {
+        return res.status(400).json({ error: "Dados obrigatórios (amount, email, name) estão faltando." });
+    }
+
+    const externalId = `order_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    console.log(`Gerando pagamento para ${email} com externalId: ${externalId}`);
+
+    const payload = {
+        external_id: externalId,
+        payment_method: "pix",
+        amount: amount,
+        buyer: {
+            name: name,
+            email: email,
+            document: document,
+            phone: phone
         },
-        transactionId: data.data.id
-    });
-} else {
-    console.error("Erro na resposta da BuckPay (dados Pix incompletos):", data);
-    res.status(400).json({
-        message: "Dados Pix incompletos na resposta da BuckPay.",
-        details: data
-    });
-}
+        product: product_id && product_name ? { id: product_id, name: product_name } : null,
+        offer: offer_id && offer_name ? { id: offer_id, name: offer_name, discount_price: discount_price, quantity: quantity } : null,
+        tracking: tracking ? tracking : null
+    };
+
+    let client;
+    try {
+        const response = await fetch(BUCK_PAY_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
+                "User-Agent": "Buckpay API"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorDetails = await response.text();
+            console.error(`Erro ao criar pagamento na BuckPay (HTTP status ${response.status}):`, errorDetails);
+            return res.status(response.status).json({
+                success: false,
+                error: "Erro ao criar pagamento na BuckPay.",
+                details: errorDetails,
+                http_status: response.status
+            });
+        }
+
+        const data = await response.json();
+        console.log("Resposta da BuckPay:", JSON.stringify(data, null, 2));
+
+        if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
+            client = await pool.connect();
+            try {
+                const insertQuery = `
+                    INSERT INTO transactions (external_id, status, amount, buyer_email, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, NOW(), NOW())
+                    RETURNING id;
+                `;
+                const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]);
+                console.log(`Transação ${externalId} salva no DB com ID interno: ${resDb.rows[0].id}`);
+            } catch (dbError) {
+                console.error(`❌ Erro ao salvar transação ${externalId} no DB:`, dbError);
+            } finally {
+                if (client) {
+                    client.release();
+                }
+            }
+
+            res.status(200).json({
+                pix: {
+                    code: data.data.pix.code,
+                    qrcode_base64: data.data.pix.qrcode_base64
+                },
+                transactionId: externalId
+            });
+        } else {
+            console.error("Resposta inesperada da BuckPay (sem PIX):", data);
+            res.status(500).json({ success: false, error: "Resposta inesperada da BuckPay (PIX não gerado)." });
+        }
 
     } catch (error) {
-        console.error("Erro ao criar transação com BuckPay:", error);
-        res.status(500).json({ error: "Erro interno ao criar transação" });
+        console.error("Erro ao processar criação de pagamento (requisição BuckPay ou DB):", error);
+        res.status(500).json({ error: "Erro interno ao criar pagamento." });
     }
 });
 
 app.post("/webhook/buckpay", async (req, res) => {
-    console.log("=== Webhook BuckPay recebido ===");
-    console.log("Headers:", req.headers);
-    console.log("Body:", JSON.stringify(req.body, null, 2));
+    const event = req.body.event;
+    const data = req.body.data;
 
-    try {
-        const { event, data } = req.body;
+    console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${data.external_id}'`);
 
-        if (!event || !data || !data.id || !data.status) {
-            console.warn("⚠️ Payload de webhook BuckPay inválido ou incompleto.");
-            return res.status(400).json({ error: "Payload de webhook inválido" });
-        }
+    if (event && data && data.external_id && data.status) {
+        const externalId = data.external_id;
+        const newStatus = data.status;
 
-        const transactionId = data.id;
-        const status = data.status;
-        const eventType = event;
+        let client;
+        try {
+            client = await pool.connect();
+            const updateQuery = `
+                UPDATE transactions
+                SET status = $1, updated_at = NOW()
+                WHERE external_id = $2;
+            `;
+            const resDb = await client.query(updateQuery, [newStatus, externalId]);
 
-        console.log(`Webhook BuckPay - Transação ID: ${transactionId}, Evento: ${eventType}, Status: ${status}`);
-
-        // --- REMOVA OU AJUSTE ESTE BLOCO DE CÓDIGO ---
-        // Se 'data.created_at' não vem no payload, não tente usá-lo.
-        // let createdAt;
-        // try {
-        //     createdAt = new Date(data.created_at);
-        //     if (isNaN(createdAt.getTime())) {
-        //         throw new Error("Data inválida");
-        //     }
-        // } catch (error) {
-        //     console.error("Erro ao processar created_at:", error);
-        //     createdAt = new Date(); // Usa a data atual em caso de erro
-        // }
-        // const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
-        // --- FIM DO BLOCO A SER REMOVIDO/AJUSTADO ---
-
-        // O evento de venda paga é 'transaction.processed'
-        if (eventType === "transaction.processed" && (status === "approved" || status === "paid")) {
-            console.log(`✅ Pagamento ${transactionId} aprovado na BuckPay. Enviando para UTMify.`);
-
-            const customer = data.buyer;
-            const totalValueInCents = data.total_amount;
-            
-            let items = [];
-            if (data.product) {
-                items.push({ id: data.product.id, name: data.product.name, priceInCents: totalValueInCents, quantity: 1 });
-            } else if (data.offer) {
-                items.push({ id: data.offer.id, name: data.offer.name, priceInCents: data.offer.discount_price, quantity: data.offer.quantity || 1 });
+            if (resDb.rowCount > 0) {
+                console.log(`✅ Status da transação ${externalId} atualizado para '${newStatus}' no DB via webhook.`);
             } else {
-                items.push({ id: "default-item", name: "Recarga Free Fire", priceInCents: totalValueInCents, quantity: 1 });
+                console.warn(`⚠️ Webhook para externalId ${externalId} recebido, mas transação não encontrada no DB para atualizar.`);
             }
-
-            // USE A DATA DE APROVAÇÃO COMO REFERÊNCIA PRINCIPAL PARA O UTMify
-            const currentFormattedDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-            const utmifyBody = {
-                orderId: transactionId.toString(),
-                platform: "FreeFireCheckout",
-                paymentMethod: "pix",
-                status: "paid",
-                // Remova 'createdAt' se ele não vem no webhook para este evento, ou defina como a data de aprovação
-                createdAt: currentFormattedDate, // Usando a data atual como data de criação/aprovação
-                approvedDate: currentFormattedDate, // A data de aprovação é a data que o webhook foi recebido/processado
-                customer: {
-                    name: customer?.name || "Cliente",
-                    email: customer?.email || "cliente@teste.com",
-                    phone: customer?.phone || "",
-                    document: customer?.document || "",
-                    country: "BR",
-                    ip: data?.ip_address || ""
-                },
-                products: items.map(item => ({
-                    id: item.id || "recarga-ff",
-                    planId: item.planId || "freefire-plan",
-                    planName: item.name || "Plano Recarga",
-                    name: item.name || "Recarga Free Fire",
-                    quantity: item.quantity || 1,
-                    priceInCents: item.priceInCents || 0
-                })),
-                commission: {
-                    totalPriceInCents: totalValueInCents || 0,
-                    gatewayFeeInCents: 0,
-                    userCommissionInCents: totalValueInCents || 0
-                },
-                trackingParameters: {
-                    utm_source: data.tracking?.utm_source || "", // Se 'tracking' vier dentro de 'data'
-                    utm_medium: data.tracking?.utm_medium || "",
-                    utm_campaign: data.tracking?.utm_campaign || "",
-                    utm_content: data.tracking?.utm_content || "",
-                    utm_term: data.tracking?.utm_term || ""
-                },
-                isTest: false
-            };
-            
-            // Certifique-se de que `data.tracking` existe antes de tentar acessar suas propriedades.
-            // Pelo seu log anterior, 'tracking' pode não vir no payload da webhook.
-            // Você pode precisar buscar os dados de tracking do seu próprio banco de dados
-            // associados ao `externalId` se eles não vierem na webhook.
-            // Por enquanto, o código acima com `data.tracking?` já trata a ausência.
-
-
-            const responseUtmify = await fetch(UTMIFY_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-api-token": UTMIFY_TOKEN
-                },
-                body: JSON.stringify(utmifyBody)
-            });
-
-            const resultUtmify = await responseUtmify.json();
-            console.log("UTMify resposta do webhook:", resultUtmify);
-
-            if (!responseUtmify.ok) {
-                console.error("Erro ao enviar dados para UTMify via webhook:", resultUtmify);
+        } catch (dbError) {
+            console.error(`❌ Erro ao atualizar DB via webhook para externalId ${externalId}:`, dbError);
+            return res.status(500).send("Erro interno ao processar webhook (DB).");
+        } finally {
+            if (client) {
+                client.release();
             }
-        } else if (eventType === "transaction.created" && status === "pending") {
-            console.log(`ℹ️ Pagamento ${transactionId} criado e pendente na BuckPay.`);
-        } else {
-            console.log(`ℹ️ Pagamento ${transactionId} com status: ${status} (Evento: ${eventType}). Nenhuma ação específica para UTMify.`);
         }
+    } else {
+        console.warn("⚠️ Webhook recebido com dados inválidos ou evento não esperado.");
+    }
 
-        res.status(200).json({ message: "Webhook processado com sucesso" });
-    } catch (error) {
-        console.error("Erro no webhook BuckPay:", error);
-        res.status(500).json({ error: "Erro interno ao processar webhook" });
+    res.status(200).send("Webhook recebido com sucesso!");
+});
+
+app.get("/check-order-status", async (req, res) => {
+    const externalId = req.query.id;
+
+    if (!externalId) {
+        return res.status(400).json({ error: "ID externo da transação não fornecido." });
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        const selectQuery = `
+            SELECT status FROM transactions WHERE external_id = $1;
+        `;
+        const resDb = await client.query(selectQuery, [externalId]);
+
+        if (resDb.rows.length > 0) {
+            const transactionStatus = resDb.rows[0].status;
+            res.status(200).json({ success: true, status: transactionStatus });
+        } else {
+            res.status(404).json({ success: false, error: "Transação não encontrada no DB." });
+        }
+    } catch (dbError) {
+        console.error(`❌ Erro ao consultar DB para externalId ${externalId}:`, dbError);
+        res.status(500).json({ error: "Erro interno ao consultar status no DB." });
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
