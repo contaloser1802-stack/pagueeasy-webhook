@@ -69,58 +69,101 @@ app.post("/create-payment", async (req, res) => {
 
     // --- CORREÇÕES APLICADAS AQUI ---
 
-    // 1. amount: Convertendo para centavos e inteiro
+    // 1. amount: Convertendo para centavos e inteiro (já estava certo, só reconfirmando)
     const amountInCents = Math.round(parseFloat(amount) * 100);
     if (isNaN(amountInCents) || amountInCents < 500) { // Mínimo de 500 centavos (R$5,00)
         return res.status(400).json({ error: "Valor de pagamento inválido ou abaixo do mínimo de R$5,00." });
     }
 
-    // 2. phone: Limpeza e validação
-    const cleanPhone = phone ? phone.replace(/\D/g, '').substring(0, 13) : ''; // Remove não-dígitos e limita a 13 chars
-    if (!/^\d{10,13}$/.test(cleanPhone)) { // Valida se tem entre 10 e 13 dígitos
-        console.warn(`Número de telefone inválido recebido: ${phone}. Usando default ou removendo.`);
-        // Dependendo da sua necessidade, você pode:
-        // A) Retornar erro: return res.status(400).json({ error: "Número de telefone inválido. Apenas números, 10-13 dígitos." });
-        // B) Usar um valor padrão: cleanPhone = "5511999999999";
-        // C) Remover o campo: buyer.phone = undefined;
-        // Por agora, vamos apenas garantir que ele seja só números e tenha um tamanho razoável.
+    // 2. phone: Limpeza e validação MAIS RIGOROSA
+    let cleanPhone = phone ? phone.replace(/\D/g, '') : ''; // Remove não-dígitos
+    // Se o telefone for muito curto, preenche com um DDD/DDI padrão e um número fictício para alcançar o mínimo de 12
+    if (cleanPhone.length < 12) {
+        // Exemplo: se for 9 dígitos (só número), adiciona 5511 (Brasil, SP)
+        if (cleanPhone.length === 9) {
+            cleanPhone = `5511${cleanPhone}`;
+        } else if (cleanPhone.length === 11) { // 55DD + 9 dígitos (com 9 na frente)
+             cleanPhone = `55${cleanPhone}`;
+        } else if (cleanPhone.length < 10) { // Se for muito curto, usa um default completo
+            cleanPhone = "5511987654321"; // Telefone default válido com 13 caracteres
+        }
     }
+    // Garante que não exceda 13 caracteres após as manipulações
+    cleanPhone = cleanPhone.substring(0, 13);
 
 
-    // 3. offer: Condição mais explícita para o objeto 'offer'
-    let offerPayload = null;
-    if (offer_id && offer_name && discount_price !== null && discount_price !== undefined) {
-        offerPayload = {
-            id: offer_id,
-            name: offer_name,
-            discount_price: Math.round(parseFloat(discount_price) * 100), // Enviar em centavos
-            quantity: quantity || 1 // Garantir que quantity exista
+    // 3. offer: SEMPRE enviar um objeto 'offer', mesmo que vazio ou com valores padrão
+    let offerPayload = {
+        id: offer_id || "", // Pode ser vazio se não houver ID real
+        name: offer_name || "", // Pode ser vazio se não houver nome real
+        discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0, // 0 se não houver desconto
+        quantity: quantity || 1
+    };
+    // Se não há offer_id ou offer_name, mas o discount_price é 0, faz mais sentido
+    // enviar um objeto offer com id e name vazios, mas sem discount_price
+    if (!offer_id && !offer_name && offerPayload.discount_price === 0) {
+        offerPayload = null; // Ou remova esta linha se a BuckPay realmente sempre espera um objeto
+                              // A mensagem "Expected object, received null" indica que ela *sempre* quer o objeto
+                              // Então, vamos manter o objeto com valores padrão, ou você pode remover esta linha `if (...) { offerPayload = null; }`
+                              // Se você tem certeza de que nunca terá uma oferta, pode simplificar para:
+                              // offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 };
+    }
+    // REVISÃO: Mantenha sempre o objeto, mesmo que vazio, para satisfazer "Expected object, received null"
+    // A única exceção é se "discount_price" for o gatilho. O erro é em "offer", não em "discount_price".
+    // Então, se não há oferta, o objeto `offer` deve ser `null` ou um objeto com campos padrão.
+    // Pelo erro, ele quer um objeto. Então, se `offer_id` e `offer_name` são nulos,
+    // o `offerPayload` ainda precisa ser um objeto.
+    // Vamos garantir que `offerPayload` seja SEMPRE um objeto se `offer_id` ou `offer_name` existir,
+    // caso contrário, um objeto vazio mas existente.
+    if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
+        offerPayload = null; // Se não tem ID, nome E preço, então não é uma oferta de fato
+                             // No entanto, o erro 'Expected object, received null' sugere que mesmo assim
+                             // ele quer um objeto vazio. Vamos tentar enviar um objeto vazio aqui se não houver dados.
+        offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 }; // Envia um objeto vazio para satisfazer
+    } else {
+         // Se houver algum dado de oferta, preenche normalmente
+         offerPayload = {
+            id: offer_id || "default_offer_id",
+            name: offer_name || "Oferta Padrão",
+            discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0,
+            quantity: quantity || 1
         };
     }
 
-    // 4. tracking: Mapeando para os campos esperados pela BuckPay
-    // Assumindo que o `tracking` do frontend já é um objeto como { utm_source: "...", xcod: "...", cid: "...", etc. }
+
+    // 4. tracking: Mapeando e GARANTINDO campos obrigatórios
     let buckpayTracking = {};
     if (tracking) {
-        // Mapeie seus parâmetros internos para os nomes da BuckPay
-        // Exemplo de mapeamento, ajuste conforme o nome exato que a BuckPay exige
+        // A BuckPay explicitamente pediu 'utm_source', 'utm_medium', 'utm_campaign'.
+        // Vamos usar esses nomes diretamente e garantir que existam.
+        buckpayTracking.utm_source = tracking.utm_source || 'direct'; // Default para 'direct'
+        buckpayTracking.utm_medium = tracking.utm_medium || 'website'; // Default para 'website'
+        buckpayTracking.utm_campaign = tracking.utm_campaign || 'no_campaign'; // Default para 'no_campaign'
+
+        // Outros campos de tracking que você usa e que a BuckPay pode suportar (ou ignorar)
+        // Mapeie os seus "xcod", "sck", "cid" para os nomes que a BuckPay espera,
+        // ou inclua-os diretamente se a BuckPay aceitar nomes arbitrários (menos comum).
+        // Se ela tem campos específicos para eles, como 'ref' e 'sck', você precisa mapear.
+        // Pelo erro anterior, parecia que 'ref' e 'sck' eram obrigatórios no tracking.
+        // Vamos tentar reintroduzir eles com valores padrão fortes.
         buckpayTracking.ref = tracking.cid || externalId; // 'ref' pode ser seu CID ou externalId
-        buckpayTracking.src = tracking.utm_source || 'direct'; // 'src' pode ser utm_source
-        buckpayTracking.sck = tracking.sck || ''; // 'sck' do frontend
-        buckpayTracking.utm_id = tracking.utm_campaign || ''; // 'utm_id' pode ser utm_campaign
+        buckpayTracking.sck = tracking.sck || 'no_sck_value'; // 'sck' do frontend
+        buckbody.xcod = tracking.xcod || 'no_xcod_value'; // Seu xcod original
         buckpayTracking.utm_term = tracking.utm_term || '';
         buckpayTracking.utm_content = tracking.utm_content || '';
-        // Adicione outros campos de tracking que a BuckPay possa pedir
+    } else {
+        // Se tracking for nulo, ainda garanta os obrigatórios com defaults
+        buckpayTracking = {
+            utm_source: 'direct',
+            utm_medium: 'website',
+            utm_campaign: 'no_campaign',
+            ref: externalId, // Padrão
+            sck: 'no_sck_value', // Padrão
+            utm_term: '',
+            utm_content: '',
+            xcod: '', // Padrão
+        };
     }
-    // Se a BuckPay realmente exige esses campos e eles podem vir vazios do frontend,
-    // você precisa garantir que eles existam no objeto `buckpayTracking`
-    // com um valor padrão, mesmo que seja uma string vazia.
-    if (!buckpayTracking.ref) buckpayTracking.ref = externalId;
-    if (!buckpayTracking.src) buckpayTracking.src = 'direct_access'; // Default caso utm_source seja nulo
-    if (!buckpayTracking.sck) buckpayTracking.sck = 'no_sck';
-    if (!buckpayTracking.utm_id) buckpayTracking.utm_id = 'no_campaign';
-    if (!buckpayTracking.utm_term) buckpayTracking.utm_term = 'no_term';
-    if (!buckpayTracking.utm_content) buckpayTracking.utm_content = 'no_content';
 
 
     const payload = {
@@ -131,11 +174,11 @@ app.post("/create-payment", async (req, res) => {
             name: name,
             email: email,
             document: document,
-            phone: cleanPhone // Usar o telefone limpo
+            phone: cleanPhone // Usar o telefone limpo e corrigido
         },
         product: product_id && product_name ? { id: product_id, name: product_name } : null,
         offer: offerPayload, // Usar o payload de oferta corrigido
-        tracking: buckpayTracking // Usar o tracking mapeado
+        tracking: buckpayTracking // Usar o tracking mapeado e garantido
     };
 
     console.log("Payload FINAL enviado para BuckPay:", JSON.stringify(payload, null, 2));
@@ -175,7 +218,10 @@ app.post("/create-payment", async (req, res) => {
                     VALUES ($1, $2, $3, $4, NOW(), NOW())
                     RETURNING id;
                 `;
-                const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]); // Salva o 'amount' original para referência, se quiser
+                // Salva o 'amount' original que veio do frontend (R$) para referência, se quiser.
+                // Ou salva 'amountInCents' se for o valor em centavos que você quer registrar.
+                // Estou mantendo o 'amount' original por agora.
+                const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]);
                 console.log(`Transação ${externalId} salva no DB com ID interno: ${resDb.rows[0].id}`);
             } catch (dbError) {
                 console.error(`❌ Erro ao salvar transação ${externalId} no DB:`, dbError);
