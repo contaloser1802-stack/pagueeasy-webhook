@@ -36,9 +36,10 @@ const pool = new Pool({
     }
 });
 
+// REMOVIDA A LINHA process.exit(-1) AQUI para maior resiliência
 pool.on('error', (err) => {
     console.error('Erro inesperado no cliente do DB:', err);
-    process.exit(-1);
+    // Não encerra o processo, apenas loga o erro. O pool tentará reconectar.
 });
 
 app.get("/", (req, res) => {
@@ -57,7 +58,6 @@ app.get("/my-server-ip", async (req, res) => {
 });
 
 app.post("/create-payment", async (req, res) => {
-    // Desestrutura os dados do frontend
     const { amount, email, name, document, phone, product_id, product_name, offer_id, offer_name, discount_price, quantity, tracking } = req.body;
 
     if (!amount || !email || !name) {
@@ -67,39 +67,27 @@ app.post("/create-payment", async (req, res) => {
     const externalId = `order_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
     console.log(`Gerando pagamento para ${email} com externalId: ${externalId}`);
 
-    // --- CORREÇÕES APLICADAS AQUI ---
-
-    // 1. amount: Convertendo para centavos e inteiro
     const amountInCents = Math.round(parseFloat(amount) * 100);
-    if (isNaN(amountInCents) || amountInCents < 500) { // Mínimo de 500 centavos (R$5,00)
+    if (isNaN(amountInCents) || amountInCents < 500) {
         return res.status(400).json({ error: "Valor de pagamento inválido ou abaixo do mínimo de R$5,00." });
     }
 
-    // 2. phone: Limpeza e validação MAIS RIGOROSA
-    let cleanPhone = phone ? phone.replace(/\D/g, '') : ''; // Remove não-dígitos
-    // Se o telefone for muito curto, preenche com um DDD/DDI padrão e um número fictício para alcançar o mínimo de 12
+    let cleanPhone = phone ? phone.replace(/\D/g, '') : '';
     if (cleanPhone.length < 12) {
-        // Exemplo: se for 9 dígitos (só número), adiciona 5511 (Brasil, SP)
         if (cleanPhone.length === 9) {
             cleanPhone = `5511${cleanPhone}`;
-        } else if (cleanPhone.length === 11) { // 55DD + 9 dígitos (com 9 na frente)
+        } else if (cleanPhone.length === 11) {
              cleanPhone = `55${cleanPhone}`;
-        } else if (cleanPhone.length < 10) { // Se for muito curto, usa um default completo
-            cleanPhone = "5511987654321"; // Telefone default válido com 13 caracteres
+        } else if (cleanPhone.length < 10) {
+            cleanPhone = "5511987654321";
         }
     }
-    // Garante que não exceda 13 caracteres após as manipulações
     cleanPhone = cleanPhone.substring(0, 13);
 
-
-    // 3. offer: SEMPRE enviar um objeto 'offer', mesmo que vazio ou com valores padrão
     let offerPayload = null;
     if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
-        // Se não tem ID, nome E preço, então não é uma oferta de fato.
-        // Pelo erro "Expected object, received null", a BuckPay quer um objeto mesmo vazio.
-        offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 }; // Envia um objeto vazio para satisfazer
+        offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 };
     } else {
-         // Se houver algum dado de oferta, preenche normalmente
          offerPayload = {
             id: offer_id || "default_offer_id",
             name: offer_name || "Oferta Padrão",
@@ -108,56 +96,33 @@ app.post("/create-payment", async (req, res) => {
         };
     }
 
-
-    // 4. tracking: Mapeando e GARANTINDO campos obrigatórios para BuckPay, usando dados da Utmify
     let buckpayTracking = {};
-
-    // Campos que a BuckPay EXIGE e seus mapeamentos mais lógicos da Utmify
-    // Usamos o operador ?. (optional chaining) para acessar propriedades de tracking com segurança.
-
-    // utm_source, utm_medium, utm_campaign: Mapeamento direto (Utmify -> BuckPay)
     buckpayTracking.utm_source = tracking?.utm_source || 'direct';
     buckpayTracking.utm_medium = tracking?.utm_medium || 'website';
     buckpayTracking.utm_campaign = tracking?.utm_campaign || 'no_campaign';
-
-    // src: BuckPay pede 'src'. Usamos utm_source como o mais próximo.
-    buckpayTracking.src = tracking?.utm_source || 'direct';
-
-    // utm_id: BuckPay pede 'utm_id'. O 'xcod' da Utmify (ID do Criativo) ou 'cid' (Click ID) são bons candidatos.
-    // Vou usar 'xcod' como padrão para utm_id da BuckPay, já que utm_campaign já está sendo usada.
-    // Se 'xcod' não vier, tentamos 'cid'. Se nada vier, usamos o externalId como fallback.
-    buckpayTracking.utm_id = tracking?.xcod || tracking?.cid || externalId;
-
-    // ref: BuckPay pede 'ref'. Usamos 'cid' da Utmify (Click ID) como o mais adequado.
+    buckpayTracking.src = tracking?.utm_source || 'direct'; // Usamos utm_source para src
+    buckpayTracking.utm_id = tracking?.xcod || tracking?.cid || externalId; // prioriza xcod, depois cid, depois externalId
     buckpayTracking.ref = tracking?.cid || externalId;
-
-    // sck: BuckPay pede 'sck'. Mapeamento direto da Utmify.
-    buckpayTracking.sck = tracking?.sck || 'no_sck_value'; // Valor padrão para 'sck' se não vier
-
-    // Outros campos da Utmify que podem ser úteis para a BuckPay (ou ela ignora)
+    buckpayTracking.sck = tracking?.sck || 'no_sck_value';
     buckpayTracking.utm_term = tracking?.utm_term || '';
     buckpayTracking.utm_content = tracking?.utm_content || '';
-    // O 'xcod' já está sendo usado para 'utm_id' da BuckPay. Se a BuckPay tiver um campo separado para 'xcod'
-    // você precisaria de outro campo, mas pelo erro ela só pediu 'utm_id'.
-
 
     const payload = {
         external_id: externalId,
         payment_method: "pix",
-        amount: amountInCents, // Usar o valor corrigido
+        amount: amountInCents,
         buyer: {
             name: name,
             email: email,
             document: document,
-            phone: cleanPhone // Usar o telefone limpo e corrigido
+            phone: cleanPhone
         },
         product: product_id && product_name ? { id: product_id, name: product_name } : null,
-        offer: offerPayload, // Usar o payload de oferta corrigido
-        tracking: buckpayTracking // Usar o tracking mapeado e garantido
+        offer: offerPayload,
+        tracking: buckpayTracking
     };
 
     console.log("Payload FINAL enviado para BuckPay:", JSON.stringify(payload, null, 2));
-
 
     let client;
     try {
@@ -186,20 +151,22 @@ app.post("/create-payment", async (req, res) => {
         console.log("Resposta da BuckPay:", JSON.stringify(data, null, 2));
 
         if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
-            client = await pool.connect();
+            // Tenta salvar no DB APENAS SE A GERAÇÃO DO PIX FOI BEM SUCEDIDA
             try {
+                client = await pool.connect();
                 const insertQuery = `
                     INSERT INTO transactions (external_id, status, amount, buyer_email, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, NOW(), NOW())
                     RETURNING id;
                 `;
-                // Salva o 'amount' original que veio do frontend (R$) para referência, se quiser.
-                // Ou salva 'amountInCents' se for o valor em centavos que você quer registrar.
-                // Estou mantendo o 'amount' original por agora.
                 const resDb = await client.query(insertQuery, [externalId, data.data.status, amount, email]);
                 console.log(`Transação ${externalId} salva no DB com ID interno: ${resDb.rows[0].id}`);
             } catch (dbError) {
                 console.error(`❌ Erro ao salvar transação ${externalId} no DB:`, dbError);
+                // IMPORTANTE: Mesmo que falhe o DB, a BuckPay já gerou o Pix.
+                // Informa o erro de DB ao cliente, mas o QR Code é o mais importante.
+                // Considere se você quer que o erro de DB impeça a resposta.
+                // Por agora, vamos retornar o Pix mesmo com erro no DB.
             } finally {
                 if (client) {
                     client.release();
@@ -211,7 +178,7 @@ app.post("/create-payment", async (req, res) => {
                     code: data.data.pix.code,
                     qrcode_base64: data.data.pix.qrcode_base64
                 },
-                transactionId: externalId
+                transactionId: externalId // Garante que o transactionId é enviado
             });
         } else {
             console.error("Resposta inesperada da BuckPay (sem PIX):", data);
@@ -220,18 +187,21 @@ app.post("/create-payment", async (req, res) => {
 
     } catch (error) {
         console.error("Erro ao processar criação de pagamento (requisição BuckPay ou DB):", error);
-        res.status(500).json({ error: "Erro interno ao criar pagamento." });
+        // Esse erro pode ser tanto da requisição fetch quanto da tentativa de conexão com o DB antes do try/catch interno.
+        res.status(500).json({ success: false, error: "Erro interno ao criar pagamento." });
     }
 });
 
 app.post("/webhook/buckpay", async (req, res) => {
     const event = req.body.event;
-    const data = req.body.data;
+    const data = req.body.data; // Os dados enviados pela BuckPay no webhook
 
     console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${data.external_id}'`);
 
-    if (event && data && data.external_id && data.status) {
-        const externalId = data.external_id;
+    // **CORREÇÃO AQUI para garantir que external_id seja lido do data**
+    const externalId = data?.external_id; // Usa optional chaining para segurança
+
+    if (event && data && externalId && data.status) { // Verifica se externalId existe e não é undefined
         const newStatus = data.status;
 
         let client;
@@ -247,7 +217,7 @@ app.post("/webhook/buckpay", async (req, res) => {
             if (resDb.rowCount > 0) {
                 console.log(`✅ Status da transação ${externalId} atualizado para '${newStatus}' no DB via webhook.`);
             } else {
-                console.warn(`⚠️ Webhook para externalId ${externalId} recebido, mas transação não encontrada no DB para atualizar.`);
+                console.warn(`⚠️ Webhook para externalId ${externalId} recebido, mas transação não encontrada no DB para atualizar. (Pode ser que o erro de DB anterior impediu o save inicial)`);
             }
         } catch (dbError) {
             console.error(`❌ Erro ao atualizar DB via webhook para externalId ${externalId}:`, dbError);
@@ -258,7 +228,7 @@ app.post("/webhook/buckpay", async (req, res) => {
             }
         }
     } else {
-        console.warn("⚠️ Webhook recebido com dados inválidos ou evento não esperado.");
+        console.warn(`⚠️ Webhook recebido com dados inválidos ou evento não esperado. Evento: ${event}, Status: ${data?.status}, External ID: ${externalId}`);
     }
 
     res.status(200).send("Webhook recebido com sucesso!");
