@@ -5,7 +5,7 @@ import cors from 'cors';
 const app = express();
 
 app.use(cors({
-    origin: ['https://freefirereward.site'], // Apenas o domínio de produção
+    origin: ['https://freefirereward.site'], // Adicionar localhost para testes locais
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -23,7 +23,20 @@ app.get("/", (req, res) => {
     res.send("Servidor online e rodando!");
 });
 
+app.get("/my-server-ip", async (req, res) => {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        console.log("IP de saída do Render:", data.ip);
+        res.send(`IP de saída do seu servidor Render: ${data.ip}`);
+    } catch (err) {
+        res.status(500).send("Erro ao obter IP.");
+    }
+});
+
 app.post("/create-payment", async (req, res) => {
+        console.log("Requisição recebida no endpoint /create-payment");
+
     try {
         const { email, telefone, nome, total, items, tracking, cpf } = req.body;
 

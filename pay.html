@@ -11,29 +11,33 @@
       defer
     ></script>
     <script>
-      (function esperarUTMify() {
-        const check = () => {
-          try {
-            if (window.__utmify && window.__utmify.cid) {
-              localStorage.setItem("utmify_cid", window.__utmify.cid);
-              console.log("✅ CID salvo:", window.__utmify.cid);
-              return true;
-            }
-          } catch (e) {}
-          return false;
-        };
+(function esperarUTMify() {
+  const check = () => {
+    try {
+      if (window.__utmify && window.__utmify.cid) {
+        localStorage.setItem("utmify_cid", window.__utmify.cid);
+        console.log("✅ CID salvo:", window.__utmify.cid);
+        return true;
+      }
+    } catch (e) {
+      // Aqui, adicionamos o catch com um erro
+      console.error("Erro ao verificar UTMify:", e);
+    }
+    return false;
+  };
 
-        let tentativas = 0;
-        const intervalo = setInterval(() => {
-          tentativas++;
-          if (check() || tentativas >= 20) clearInterval(intervalo);
-        }, 300);
-      })();
+  let tentativas = 0;
+  const intervalo = setInterval(() => {
+    tentativas++;
+    if (check() || tentativas >= 20) clearInterval(intervalo);
+  }, 300);
+})();
     </script>
     <script>
       // REMOVIDO: Facebook Pixel
     </script>
-    <meta name="viewport" content="width=device-width, initial="initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Finalizar Pagamento - Free Fire</title>
     <meta
       name="description"
@@ -327,7 +331,7 @@
     <script>
       // GARANTINDO QUE A URL DO BACKEND ESTEJA SEMPRE ACESSÍVEL
       // Ajuste esta URL se o seu servidor estiver em uma porta ou domínio diferente.
-      window.BACKEND_URL = "https://freefirereward.site";
+      window.BACKEND_URL = "https://pagueeasy-webhook.onrender.com"; // <-- CORRIGIDO AQUI!
 
       // --- AS DEMAIS FUNÇÕES E LÓGICAS ABAIXO DESTA LINHA ---
 
@@ -612,38 +616,38 @@
 
         console.log("Payload enviado para o backend:", JSON.stringify(payload, null, 2));
 
-        // Envia para a API do seu backend
-        try {
-          const response = await fetch(`${window.BACKEND_URL}/create-payment`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
+        // Envia para a API do seu backend
+        try {
+          const response = await fetch(`${window.BACKEND_URL}/create-payment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
 
-          const data = await response.json();
+          const data = await response.json();
 
-          // Verifica se os dados estão corretos
-          if (response.ok && data.pix && data.pix.code && data.pix.qrcode_base64 && data.transactionId) {
-            // AQUI: Pegue o transactionId da resposta do backend
-            const transactionId = data.transactionId; 
-            
-            // Envia para UTMify com o status "waiting_payment"
-            enviarParaUtmify(
-              transactionId, // Usar transactionId corretamente
-              "waiting_payment",
-              totalBase,
-              nome,
-              email,
-              telefone,
-              cpf
-            );
+          // Verifica se os dados estão corretos
+          if (response.ok && data.pix && data.pix.code && data.pix.qrcode_base64 && data.transactionId) {
+            // AQUI: Pegue o transactionId da resposta do backend
+            const transactionId = data.transactionId; 
+            
+            // Envia para UTMify com o status "waiting_payment"
+            enviarParaUtmify(
+              transactionId, // Usar transactionId corretamente
+              "waiting_payment",
+              totalBase,
+              nome,
+              email,
+              telefone,
+              cpf
+            );
 
-            const qrBase64 = data.pix.qrcode_base64;
-            const pixCopyCode = data.pix.code; // Corrigido para acessar data.pix.code
+            const qrBase64 = data.pix.qrcode_base64;  // QR code em base64
+            const pixCopyCode = data.pix.code;  // Código Pix que pode ser copiado
 
-            // Verifica se o QR Code base64 está correto
+            // Verifique se o QR Code base64 está correto
             console.log("QR Code Base64:", qrBase64);
             console.log("Código Pix:", pixCopyCode);
 
@@ -651,40 +655,40 @@
             const qrImageElement = document.getElementById("pix-qrcode");
 
             if (qrImageElement) {
-              qrImageElement.src = `data:image/png;base64,${qrBase64}`;
-              document.getElementById("pix-wrapper").style.display = "block";
-              document.getElementById("loading").style.display = "none";
+                qrImageElement.src = `data:image/png;base64,${qrBase64}`;
+                document.getElementById("pix-wrapper").style.display = "block";  // Exibe o QR Code
+                document.getElementById("loading").style.display = "none";  // Remove o loading
 
-              // Define o texto do código Pix e mostra
-              document.getElementById("pix-code").textContent = pixCopyCode;
-              document.getElementById("pix-code").style.display = "block";
-              document.getElementById("copiar-pix").style.display = "block";
-              document.getElementById("pix-warning").style.display = "block";
-
-              // Inicia o monitoramento do pagamento
-              monitorarPagamento(
-                transactionId, // Usar transactionId corretamente
-                totalBase,
-                nome,
-                email,
-                telefone,
-                cpf
-              );
+                // Define o texto do código Pix e mostra
+                document.getElementById("pix-code").textContent = pixCopyCode;
+                document.getElementById("pix-code").style.display = "block";  // Exibe o código Pix
+                document.getElementById("copiar-pix").style.display = "block";  // Mostra o botão para copiar
+                document.getElementById("pix-warning").style.display = "block";  // Exibe o aviso de não fechar a página
             } else {
-              console.error("Elemento para exibir o QR Code não encontrado.");
+                console.error("Elemento para exibir o QR Code não encontrado.");
             }
-          } else {
-            // Se a resposta não foi OK ou faltaram dados essenciais
-            document.getElementById("loading").style.display = "none";
-            const errorMessage = data.message || JSON.stringify(data);
-            alert("Erro ao gerar QR Code Pix: " + errorMessage);
-            console.error("Erro na resposta da BuckPay ou backend:", data);
-          }
-        } catch (e) {
-          document.getElementById("loading").style.display = "none";
-          alert("Erro ao conectar com o backend: " + e.message);
-          console.error("Erro na comunicação com o backend:", e);
-        }
+
+              // Inicia o monitoramento do pagamento
+              monitorarPagamento(
+                transactionId, // Usar transactionId corretamente
+                totalBase,
+                nome,
+                email,
+                telefone,
+                cpf
+              );
+          } else { // <--- ESTE É O `else` CORRETO para o `if (response.ok && ...)`
+            // Se a resposta não foi OK ou faltaram dados essenciais
+            document.getElementById("loading").style.display = "none";
+            const errorMessage = data.message || JSON.stringify(data);
+            alert("Erro ao gerar QR Code Pix: " + errorMessage);
+            console.error("Erro na resposta da BuckPay ou backend:", data);
+          }
+        } catch (e) {
+          document.getElementById("loading").style.display = "none";
+          alert("Erro ao conectar com o backend: " + e.message);
+          console.error("Erro na comunicação com o backend:", e);
+        }
       }
 
       document.getElementById("copiar-pix").addEventListener("click", function () {
