@@ -1,45 +1,21 @@
-// server.js
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
-// Remova a importação do pg e Pool, ou comente-as:
-// import pkg from "pg";
-// const { Pool } = pkg;
 
 const app = express();
 
 const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
 const BUCK_PAY_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
-// A variável DATABASE_URL não será mais usada, mas pode permanecer na Environment do Render.
-// const DATABASE_URL = process.env.DATABASE_URL;
+// DATABASE_URL não será mais usado, mas pode permanecer na Environment do Render.
 
 if (!BUCK_PAY_API_KEY) {
     console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
     process.exit(1);
 }
 
-// Comente ou remova todo o bloco de inicialização do pool:
-/*
-let pool = null;
-if (DATABASE_URL) {
-    pool = new Pool({
-        connectionString: DATABASE_URL,
-        ssl: {
-            rejectUnauthorized: false
-        }
-    });
-
-    pool.on('error', (err) => {
-        console.error('Erro inesperado no cliente do DB:', err);
-    });
-} else {
-    console.warn("Banco de dados não configurado. As operações de DB serão ignoradas.");
-}
-*/
-
 // Middlewares
 app.use(cors({
-    origin: 'https://freefirereward.site',
+    origin: 'https://freefirereward.site', // Verifique se este domínio está correto para seu frontend
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -83,10 +59,10 @@ app.post("/create-payment", async (req, res) => {
         } else if (cleanPhone.length === 11) {
              cleanPhone = `55${cleanPhone}`;
         } else if (cleanPhone.length < 10) {
-            cleanPhone = "5511987654321";
+            cleanPhone = "5511987654321"; // Telefone padrão de fallback
         }
     }
-    cleanPhone = cleanPhone.substring(0, 13);
+    cleanPhone = cleanPhone.substring(0, 13); // Garante que não exceda o limite
 
     let offerPayload = null;
     if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
@@ -154,13 +130,12 @@ app.post("/create-payment", async (req, res) => {
         console.log("Resposta da BuckPay:", JSON.stringify(data, null, 2));
 
         if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
-            // REMOVIDO TODO O CÓDIGO DE INTERAÇÃO COM O DB AQUI
             res.status(200).json({
                 pix: {
                     code: data.data.pix.code,
                     qrcode_base64: data.data.pix.qrcode_base64
                 },
-                transactionId: externalId
+                transactionId: externalId // Retorna o externalId para o frontend usar na consulta
             });
         } else {
             console.error("Resposta inesperada da BuckPay (sem PIX):", data);
@@ -179,21 +154,61 @@ app.post("/webhook/buckpay", async (req, res) => {
 
     console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${data.external_id}'`);
 
-    // REMOVIDO TODO O CÓDIGO DE INTERAÇÃO COM O DB AQUI PARA WEBHOOKS
-    // Apenas loga e retorna OK para a BuckPay
+    // Com esta solução, o backend APENAS LOGA o webhook,
+    // pois não há DB para persistir o status.
+    // O frontend é quem fará a checagem ativa.
+
     res.status(200).send("Webhook recebido com sucesso!");
 });
 
-// A rota /check-order-status agora SEMPRE simula "paid", pois não há DB para consultar.
+// NOVA ROTA: Consulta o status da transação diretamente na BuckPay
 app.get("/check-order-status", async (req, res) => {
-    const externalId = req.query.id;
+    const externalId = req.query.id; // Ou `req.query.buckpayId` se você passar o ID da BuckPay
 
     if (!externalId) {
         return res.status(400).json({ error: "ID externo da transação não fornecido." });
     }
 
-    console.warn(`Simulando status 'paid' para externalId ${externalId} (DB desabilitado).`);
-    return res.status(200).json({ success: true, status: "paid" }); // SEMPRE RETORNA "PAID"
+    try {
+        // **IMPORTANTE:** O endpoint e o método para consultar o status na BuckPay
+        // podem variar. Você PRECISA verificar a documentação da API da BuckPay
+        // para saber qual é o endpoint correto para consultar status de uma transação.
+        // Vou usar um exemplo genérico aqui:
+        const BUCK_PAY_STATUS_URL = `${BUCK_PAY_URL}/${externalId}`; // Exemplo: GET /v1/transactions/{id}
+        // OU: const BUCK_PAY_STATUS_URL = `${BUCK_PAY_URL}?external_id=${externalId}`; // Exemplo: GET /v1/transactions?external_id={external_id}
+
+        const response = await fetch(BUCK_PAY_STATUS_URL, {
+            method: "GET", // ou "POST" se a API BuckPay exigir para consulta
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
+                "User-Agent": "Buckpay API Status Check"
+            }
+        });
+
+        if (!response.ok) {
+            const errorDetails = await response.text();
+            console.error(`Erro ao consultar status na BuckPay (HTTP status ${response.status}):`, errorDetails);
+            return res.status(response.status).json({
+                success: false,
+                error: "Erro ao consultar status na BuckPay.",
+                details: errorDetails
+            });
+        }
+
+        const data = await response.json();
+        console.log(`Status BuckPay para ${externalId}:`, data.data?.status);
+
+        // Adapte 'data.data?.status' para o caminho correto do status na resposta da BuckPay
+        // Por exemplo, pode ser data.status, data.transaction.status, etc.
+        const statusFromBuckPay = data.data?.status || 'unknown'; // Ajuste este caminho
+
+        res.status(200).json({ success: true, status: statusFromBuckPay });
+
+    } catch (error) {
+        console.error("Erro ao consultar status da BuckPay:", error);
+        res.status(500).json({ success: false, error: "Erro interno ao consultar status." });
+    }
 });
 
 

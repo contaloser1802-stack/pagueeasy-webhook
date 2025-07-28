@@ -2,7 +2,6 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-
     <script
       src="https://cdn.utmify.com.br/scripts/utms/latest.js"
       data-utmify-prevent-xcod-sck
@@ -11,30 +10,26 @@
       defer
     ></script>
     <script>
-(function esperarUTMify() {
-  const check = () => {
-    try {
-      if (window.__utmify && window.__utmify.cid) {
-        localStorage.setItem("utmify_cid", window.__utmify.cid);
-        console.log("✅ CID salvo:", window.__utmify.cid);
-        return true;
-      }
-    } catch (e) {
-      // Aqui, adicionamos o catch com um erro
-      console.error("Erro ao verificar UTMify:", e);
-    }
-    return false;
-  };
+      (function esperarUTMify() {
+        const check = () => {
+          try {
+            if (window.__utmify && window.__utmify.cid) {
+              localStorage.setItem("utmify_cid", window.__utmify.cid);
+              console.log("✅ CID salvo:", window.__utmify.cid);
+              return true;
+            }
+          } catch (e) {
+            console.error("Erro ao verificar UTMify:", e);
+          }
+          return false;
+        };
 
-  let tentativas = 0;
-  const intervalo = setInterval(() => {
-    tentativas++;
-    if (check() || tentativas >= 20) clearInterval(intervalo);
-  }, 300);
-})();
-    </script>
-    <script>
-      // REMOVIDO: Facebook Pixel
+        let tentativas = 0;
+        const intervalo = setInterval(() => {
+          tentativas++;
+          if (check() || tentativas >= 20) clearInterval(intervalo);
+        }, 300);
+      })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -389,7 +384,7 @@
       }
 
       // ====================
-      // Função Utmify
+      // Função Utmify (MANTIDA)
       // ====================
       const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
       const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // Substitua pelo token real
@@ -397,7 +392,7 @@
       async function enviarParaUtmify(
         orderId,
         status,
-        total,
+        total, // total aqui agora é o valor monetário (totalBase)
         nome,
         email,
         telefone,
@@ -479,22 +474,26 @@
         }
       }
 
-      // NOVO: Definindo monitorarPagamento antes de criarTransacaoPix
+      // NOVO: Definindo monitorarPagamento (AJUSTADO PARA A NOVA ROTA)
       async function monitorarPagamento(
         transactionId,
-        totalBase,
+        totalBase, // Passar o valor real da transação
         nome,
         email,
         telefone,
         cpf
       ) {
-        const API_STATUS_URL = `${window.BACKEND_URL}/payment-status?id=${transactionId}`;
+        // A NOVA ROTA DE CHECAGEM NO BACKEND É '/check-order-status'
+        const API_STATUS_URL = `${window.BACKEND_URL}/check-order-status?id=${transactionId}`;
+        console.log("Iniciando monitoramento para Transaction ID:", transactionId);
+
         const interval = setInterval(async () => {
           try {
             const response = await fetch(API_STATUS_URL);
             const data = await response.json();
 
-            if (data.status === "approved") {
+            if (data.success && data.status === "paid") {
+              // Status "paid" vem direto da BuckPay via seu backend
               clearInterval(interval);
               alert("Pagamento aprovado!");
 
@@ -502,7 +501,7 @@
               enviarParaUtmify(
                 transactionId,
                 "paid",
-                totalBase,
+                totalBase, // Use o valor base real aqui
                 nome,
                 email,
                 telefone,
@@ -518,13 +517,17 @@
             } else if (
               data.status === "canceled" ||
               data.status === "refunded" ||
-              data.status === "expired"
+              data.status === "expired" ||
+              data.status === "failed" // Adiciona 'failed' da BuckPay
             ) {
               clearInterval(interval);
               alert(
                 `Pagamento ${data.status.toLowerCase()}. Por favor, refaça o pedido.`
               );
               console.log("Pagamento cancelado ou falho:", data.status);
+              // Opcional: Redirecionar para página de erro ou manter na mesma e dar opção de refazer
+            } else {
+              console.log("Status atual:", data.status, "- Aguardando pagamento...");
             }
           } catch (e) {
             console.error("Erro ao monitorar pagamento:", e);
@@ -533,11 +536,11 @@
         }, 5000); // Polling a cada 5 segundos
       }
 
-      // Função principal para criar transacao PIX
+      // Função principal para criar transacao PIX (AJUSTADA PARA O NOVO BACKEND)
       async function criarTransacaoPix() {
         let email = localStorage.getItem("checkout_email");
         let telefone =
-          localStorage.getItem("checkout_telefone") || "87997653216"; // Usar o telefone do localStorage
+          localStorage.getItem("checkout_telefone") || "87997653216";
         let orderBumps = JSON.parse(
           localStorage.getItem("checkout_orderBumps") || "[]"
         );
@@ -554,98 +557,90 @@
         if (!email) email = "cliente@freefire.com";
         const cpf = gerarCPF(); // Gera um CPF válido a cada transação
 
-        // Monta os itens (apenas para exibir na API, mas não somar novamente)
-        let items = [
-          {
-            unitPrice: Math.round(
-              (totalBase - orderBumps.reduce((sum, bump) => sum + bump.price, 0)) * 100
-            ),
-            title: "Recarga Free Fire",
-            quantity: 1,
-            tangible: false,
-          },
-        ];
+        // O backend agora espera 'amount', 'product_id', 'product_name', 'offer_id', 'offer_name', 'discount_price', 'quantity'
+        // e um objeto 'tracking' com 'utm_source', etc.
+        // A lógica de 'items' não é mais necessária no frontend para o backend.
+
+        let product_id = "recarga-ff"; // ID do produto principal
+        let product_name = "Recarga Free Fire"; // Nome do produto principal
+        let offer_id = ""; // Pode ser o ID do bump
+        let offer_name = ""; // Pode ser o nome do bump
+        let discount_price = 0; // Se houver desconto no bump
+        let quantity = 1;
+
         if (orderBumps.length > 0) {
-          orderBumps.forEach((bump) => {
-            items.push({
-              unitPrice: Math.round(bump.price * 100),
-              title: bump.name,
-              quantity: 1,
-              tangible: false,
-            });
-          });
+            // Se houver order bumps, vamos assumir que o primeiro bump é a "oferta"
+            // Se houver múltiplos, você pode adaptar para enviar um array ou somar.
+            // Para simplicidade, pegando o primeiro bump para a "offer" do BuckPay payload.
+            const firstBump = orderBumps[0];
+            offer_id = firstBump.id || "default_offer_id";
+            offer_name = firstBump.name || "Oferta Adicional";
+            discount_price = firstBump.price || 0; // O preço do bump é o "desconto" ou valor da oferta
+            quantity = 1; // Quantidade da oferta
         }
 
-        // UTM e outros parâmetros opcionais
+        // UTM e outros parâmetros opcionais para o backend
         const urlParams = new URLSearchParams(window.location.search);
-        let utmParams = {};
-        [
-          "utm_source",
-          "utm_medium",
-          "utm_campaign",
-          "utm_content",
-          "utm_term",
-          "xcod",
-          "sck",
-        ].forEach((key) => {
-          const val = urlParams.get(key);
-          if (val) utmParams[key] = val;
-        });
+        let tracking = {
+            utm_source: urlParams.get("utm_source") || "",
+            utm_medium: urlParams.get("utm_medium") || "",
+            utm_campaign: urlParams.get("utm_campaign") || "",
+            utm_content: urlParams.get("utm_content") || "",
+            utm_term: urlParams.get("utm_term") || "",
+            xcod: urlParams.get("xcod") || "",
+            sck: urlParams.get("sck") || "",
+            // O CID do UTMify é gerenciado internamente pelo backend
+        };
 
-        // Monta o payload para o seu backend
+
+        // Monta o payload para o seu backend, conforme o server.js espera
         const payload = {
-          nome: nome,
-          email: email,
-          cpf: cpf,
-          telefone: telefone, // Mudado de 'phone' para 'telefone' para corresponder ao server.js
-          total: totalBase, // Mudado de 'amount' para 'total' para corresponder ao server.js
-          items: items,
-          tracking: {
-            utm: {
-              source: utmParams.utm_source || "",
-              medium: utmParams.utm_medium || "",
-              campaign: utmParams.utm_campaign || "",
-              content: utmParams.utm_content || "",
-              term: utmParams.utm_term || "",
-            },
-            xcod: utmParams.xcod || "",
-            sck: utmParams.sck || "",
-            cid: localStorage.getItem("utmify_cid") || "",
-          },
+            amount: totalBase, // Agora o 'amount' é o 'totalBase'
+            email: email,
+            name: nome,
+            document: cpf,
+            phone: telefone, // Mantido como 'phone' no backend
+            product_id: product_id,
+            product_name: product_name,
+            offer_id: offer_id,
+            offer_name: offer_name,
+            discount_price: discount_price, // Preço do bump como discount_price
+            quantity: quantity,
+            tracking: tracking, // Objeto de tracking
         };
 
         console.log("Payload enviado para o backend:", JSON.stringify(payload, null, 2));
 
-        // Envia para a API do seu backend
-        try {
-          const response = await fetch(`${window.BACKEND_URL}/create-payment`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
+        // Envia para a API do seu backend
+        try {
+          const response = await fetch(`${window.BACKEND_URL}/create-payment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
 
-          const data = await response.json();
+          const data = await response.json();
 
-          // Verifica se os dados estão corretos
-          if (response.ok && data.pix && data.pix.code && data.pix.qrcode_base64 && data.transactionId) {
-            // AQUI: Pegue o transactionId da resposta do backend
-            const transactionId = data.transactionId; 
-            
-            // Envia para UTMify com o status "waiting_payment"
-            enviarParaUtmify(
-              transactionId, // Usar transactionId corretamente
-              "waiting_payment",
-              totalBase,
-              nome,
-              email,
-              telefone,
-              cpf
-            );
+          // Verifica se os dados estão corretos
+          if (response.ok && data.pix && data.pix.code && data.pix.qrcode_base64 && data.transactionId) {
+            // AQUI: Pegue o transactionId da resposta do backend (é o external_id)
+            const transactionId = data.transactionId;
 
-            const qrBase64 = data.pix.qrcode_base64;  // QR code em base64
-            const pixCopyCode = data.pix.code;  // Código Pix que pode ser copiado
+            // Envia para UTMify com o status "waiting_payment"
+            enviarParaUtmify(
+              transactionId, // Usar transactionId corretamente
+              "waiting_payment",
+              totalBase, // Passar o totalBase, que é o valor monetário
+              nome,
+              email,
+              telefone,
+              cpf
+            );
+
+            const qrBase64 = data.pix.qrcode_base64; // QR code em base64
+            const pixCopyCode = data.pix.code; // Código Pix que pode ser copiado
 
             // Verifique se o QR Code base64 está correto
             console.log("QR Code Base64:", qrBase64);
@@ -655,40 +650,40 @@
             const qrImageElement = document.getElementById("pix-qrcode");
 
             if (qrImageElement) {
-                qrImageElement.src = `data:image/png;base64,${qrBase64}`;
-                document.getElementById("pix-wrapper").style.display = "block";  // Exibe o QR Code
-                document.getElementById("loading").style.display = "none";  // Remove o loading
+              qrImageElement.src = `data:image/png;base64,${qrBase64}`;
+              document.getElementById("pix-wrapper").style.display = "block"; // Exibe o QR Code
+              document.getElementById("loading").style.display = "none"; // Remove o loading
 
-                // Define o texto do código Pix e mostra
-                document.getElementById("pix-code").textContent = pixCopyCode;
-                document.getElementById("pix-code").style.display = "block";  // Exibe o código Pix
-                document.getElementById("copiar-pix").style.display = "block";  // Mostra o botão para copiar
-                document.getElementById("pix-warning").style.display = "block";  // Exibe o aviso de não fechar a página
+              // Define o texto do código Pix e mostra
+              document.getElementById("pix-code").textContent = pixCopyCode;
+              document.getElementById("pix-code").style.display = "block"; // Exibe o código Pix
+              document.getElementById("copiar-pix").style.display = "block"; // Mostra o botão para copiar
+              document.getElementById("pix-warning").style.display = "block"; // Exibe o aviso de não fechar a página
             } else {
-                console.error("Elemento para exibir o QR Code não encontrado.");
+              console.error("Elemento para exibir o QR Code não encontrado.");
             }
 
-              // Inicia o monitoramento do pagamento
-              monitorarPagamento(
-                transactionId, // Usar transactionId corretamente
-                totalBase,
-                nome,
-                email,
-                telefone,
-                cpf
-              );
-          } else { // <--- ESTE É O `else` CORRETO para o `if (response.ok && ...)`
-            // Se a resposta não foi OK ou faltaram dados essenciais
-            document.getElementById("loading").style.display = "none";
-            const errorMessage = data.message || JSON.stringify(data);
-            alert("Erro ao gerar QR Code Pix: " + errorMessage);
-            console.error("Erro na resposta da BuckPay ou backend:", data);
-          }
-        } catch (e) {
-          document.getElementById("loading").style.display = "none";
-          alert("Erro ao conectar com o backend: " + e.message);
-          console.error("Erro na comunicação com o backend:", e);
-        }
+            // Inicia o monitoramento do pagamento
+            monitorarPagamento(
+              transactionId, // Usar transactionId corretamente
+              totalBase, // Passar o totalBase
+              nome,
+              email,
+              telefone,
+              cpf
+            );
+          } else {
+            // Se a resposta não foi OK ou faltaram dados essenciais
+            document.getElementById("loading").style.display = "none";
+            const errorMessage = data.message || JSON.stringify(data);
+            alert("Erro ao gerar QR Code Pix: " + errorMessage);
+            console.error("Erro na resposta da BuckPay ou backend:", data);
+          }
+        } catch (e) {
+          document.getElementById("loading").style.display = "none";
+          alert("Erro ao conectar com o backend: " + e.message);
+          console.error("Erro na comunicação com o backend:", e);
+        }
       }
 
       document.getElementById("copiar-pix").addEventListener("click", function () {
