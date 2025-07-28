@@ -76,14 +76,15 @@ app.post("/create-payment", async (req, res) => {
 
         console.log("Payload enviado para BuckPay:", JSON.stringify(payload, null, 2));
 
-        const response = await fetch(BUCK_PAY_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${BUCK_PAY_API_KEY}`
-            },
-            body: JSON.stringify(payload)
-        });
+const response = await fetch(BUCK_PAY_URL, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
+        "User-Agent": "Buckpay API" // <-- ADICIONE ESTA LINHA AQUI!
+    },
+    body: JSON.stringify(payload)
+});
 
 if (!response.ok) {
     const errorDetails = await response.text();
