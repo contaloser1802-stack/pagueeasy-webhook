@@ -108,61 +108,6 @@ if (data.data && data.data.pix && data.data.pix.qrcode_base64) {
     }
 });
 
-// Função para criar um delay
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-app.get("/payment-status", async (req, res) => {
-    try {
-        const queriedExternalId = req.query.id;
-        if (!queriedExternalId) {
-            return res.status(400).json({ error: "ID externo da transação é obrigatório." });
-        }
-
-        const BUCK_PAY_STATUS_URL = `${BUCK_PAY_URL}/external_id/${queriedExternalId}`;
-        console.log(`Consultando status da transação com external_id: ${queriedExternalId}`);
-
-        let attempts = 0;
-        let statusData = null;
-
-        // Tentando até 5 vezes com intervalo de 5 segundos
-        while (attempts < 5) {
-            const response = await fetch(BUCK_PAY_STATUS_URL, {
-                method: "GET",
-                headers: {
-                    "Authorization": `Bearer ${BUCK_PAY_API_KEY}`
-                }
-            });
-
-            if (response.ok) {
-                statusData = await response.json();
-                console.log("Status da transação:", statusData);
-                break;
-            }
-
-            attempts++;
-            console.log(`Tentativa ${attempts} falhou. Tentando novamente em 10 segundos...`);
-            await delay(10000); // Espera 5 segundos antes de tentar novamente
-        }
-
-        if (!statusData) {
-            return res.status(500).json({ error: "Não foi possível consultar o status após várias tentativas." });
-        }
-
-        const status = statusData.data?.status;
-        let statusFrontend = "pending";
-        if (status === "approved" || status === "paid") {
-            statusFrontend = "approved";
-        } else if (status === "canceled" || status === "refunded" || status === "expired") {
-            statusFrontend = status;
-        }
-
-        res.status(200).json({ status: statusFrontend, buckPayData: statusData });
-
-    } catch (error) {
-        console.error("Erro ao consultar status da BuckPay:", error);
-        res.status(500).json({ error: "Erro interno ao consultar status" });
-    }
-});
 app.post("/webhook/buckpay", async (req, res) => {
     console.log("=== Webhook BuckPay recebido ===");
     console.log("Headers:", req.headers);
