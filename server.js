@@ -131,37 +131,28 @@ app.post("/create-payment", async (req, res) => {
     }
 
 
-    // 4. tracking: Mapeando e GARANTINDO campos obrigatórios
-    let buckpayTracking = {};
+        // 4. tracking: Mapeando e GARANTINDO campos obrigatórios
+    let buckpayTracking = {}; // Esta variável já está definida acima
     if (tracking) {
-        // A BuckPay explicitamente pediu 'utm_source', 'utm_medium', 'utm_campaign'.
-        // Vamos usar esses nomes diretamente e garantir que existam.
-        buckpayTracking.utm_source = tracking.utm_source || 'direct'; // Default para 'direct'
-        buckpayTracking.utm_medium = tracking.utm_medium || 'website'; // Default para 'website'
-        buckpayTracking.utm_campaign = tracking.utm_campaign || 'no_campaign'; // Default para 'no_campaign'
+        buckpayTracking.utm_source = tracking.utm_source || 'direct';
+        buckpayTracking.utm_medium = tracking.utm_medium || 'website';
+        buckpayTracking.utm_campaign = tracking.utm_campaign || 'no_campaign';
 
-        // Outros campos de tracking que você usa e que a BuckPay pode suportar (ou ignorar)
-        // Mapeie os seus "xcod", "sck", "cid" para os nomes que a BuckPay espera,
-        // ou inclua-os diretamente se a BuckPay aceitar nomes arbitrários (menos comum).
-        // Se ela tem campos específicos para eles, como 'ref' e 'sck', você precisa mapear.
-        // Pelo erro anterior, parecia que 'ref' e 'sck' eram obrigatórios no tracking.
-        // Vamos tentar reintroduzir eles com valores padrão fortes.
-        buckpayTracking.ref = tracking.cid || externalId; // 'ref' pode ser seu CID ou externalId
-        buckpayTracking.sck = tracking.sck || 'no_sck_value'; // 'sck' do frontend
-        buckbody.xcod = tracking.xcod || 'no_xcod_value'; // Seu xcod original
+        buckpayTracking.ref = tracking.cid || externalId;
+        buckpayTracking.sck = tracking.sck || 'no_sck_value';
+        buckpayTracking.xcod = tracking.xcod || 'no_xcod_value'; // <--- CORRIGIDO AQUI
         buckpayTracking.utm_term = tracking.utm_term || '';
         buckpayTracking.utm_content = tracking.utm_content || '';
     } else {
-        // Se tracking for nulo, ainda garanta os obrigatórios com defaults
         buckpayTracking = {
             utm_source: 'direct',
             utm_medium: 'website',
             utm_campaign: 'no_campaign',
-            ref: externalId, // Padrão
-            sck: 'no_sck_value', // Padrão
+            ref: externalId,
+            sck: 'no_sck_value',
             utm_term: '',
             utm_content: '',
-            xcod: '', // Padrão
+            xcod: '', // <--- CORRIGIDO AQUI
         };
     }
 
