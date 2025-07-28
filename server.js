@@ -1,20 +1,20 @@
 // server.js
-const express = require("express");
-const cors = require("cors");
-const fetch = require("node-fetch");
-const { Pool } = require("pg");
+// Altere 'require' para 'import'
+import express from "express";
+import cors from "cors";
+import fetch from "node-fetch";
+import pkg from "pg"; // <-- Importe o pacote 'pg' dessa forma
+const { Pool } = pkg; // <-- Desestruture 'Pool' de 'pkg'
 
 const app = express();
 
-// --- REMOVA ESTA LINHA SE VOCÊ NÃO USA .env LOCALMENTE ---
-// require("dotenv").config();
-// --------------------------------------------------------
+// Se você removeu require("dotenv").config(); no passo anterior, mantenha removido.
+// Se você não usa .env localmente, não precisa dela.
 
 const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
 const BUCK_PAY_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// Verifica se as variáveis de ambiente estão configuradas (agora, elas virão SOMENTE do Render)
 if (!BUCK_PAY_API_KEY) {
     console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
     process.exit(1);
@@ -33,7 +33,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// Configuração do Pool de Conexões com o Banco de Dados
 const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: {
@@ -46,12 +45,10 @@ pool.on('error', (err) => {
     process.exit(-1);
 });
 
-// Rota de teste
 app.get("/", (req, res) => {
     res.send("Servidor PagueEasy está online!");
 });
 
-// Rota para obter o IP do servidor (útil para debug)
 app.get("/my-server-ip", async (req, res) => {
     try {
         const response = await fetch("https://api.ipify.org?format=json");
@@ -63,7 +60,6 @@ app.get("/my-server-ip", async (req, res) => {
     }
 });
 
-// Rota para criar um pagamento Pix
 app.post("/create-payment", async (req, res) => {
     const { amount, email, name, document, phone, product_id, product_name, offer_id, offer_name, discount_price, quantity, tracking } = req.body;
 
