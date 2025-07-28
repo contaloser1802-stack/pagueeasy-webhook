@@ -168,14 +168,13 @@ app.post("/webhook/buckpay", async (req, res) => {
     console.log("Headers:", req.headers);
     console.log("Body:", JSON.stringify(req.body, null, 2));
 
-    try {
-        // A estrutura do webhook da BuckPay é 'event' e 'data' no corpo da requisição
+      try {
         const { event, data } = req.body;
 
         // Verifica se o payload essencial está presente
         if (!event || !data || !data.id || !data.status) {
-             console.warn("⚠️ Payload de webhook BuckPay inválido ou incompleto.");
-             return res.status(400).json({ error: "Payload de webhook inválido" });
+            console.warn("⚠️ Payload de webhook BuckPay inválido ou incompleto.");
+            return res.status(400).json({ error: "Payload de webhook inválido" });
         }
 
         const transactionId = data.id; // ID interno da BuckPay do webhook
@@ -184,6 +183,20 @@ app.post("/webhook/buckpay", async (req, res) => {
 
         console.log(`Webhook BuckPay - Transação ID: ${transactionId}, Evento: ${eventType}, Status: ${status}`);
 
+        // Verifica se a data.created_at é válida antes de usá-la
+        let createdAt;
+        try {
+            createdAt = new Date(data.created_at);
+            if (isNaN(createdAt.getTime())) {
+                throw new Error("Data inválida");
+            }
+        } catch (error) {
+            console.error("Erro ao processar created_at:", error);
+            createdAt = new Date();  // Usa a data atual em caso de erro
+        }
+
+        const formattedDate = createdAt.toISOString().slice(0, 19).replace('T', ' ');
+
         // O evento de venda paga é 'transaction.processed'
         if (eventType === "transaction.processed" && (status === "approved" || status === "paid")) {
             console.log(`✅ Pagamento ${transactionId} aprovado na BuckPay. Enviando para UTMify.`);
@@ -191,24 +204,21 @@ app.post("/webhook/buckpay", async (req, res) => {
             const customer = data.buyer; // Webhook usa 'buyer' diretamente em 'data'
             const totalValueInCents = data.total_amount; // Usar total_amount do webhook
             
-            // Lidar com produtos/ofertas do webhook. Adaptar conforme a estrutura real do seu produto/oferta no webhook.
             let items = [];
             if (data.product) {
                 items.push({ id: data.product.id, name: data.product.name, priceInCents: totalValueInCents, quantity: 1 });
             } else if (data.offer) {
                 items.push({ id: data.offer.id, name: data.offer.name, priceInCents: data.offer.discount_price, quantity: data.offer.quantity || 1 });
             } else {
-                // Se não houver product nem offer, tentar usar os items do metadata se existirem
                 items = data.metadata?.order_items || [];
             }
-
 
             const utmifyBody = {
                 orderId: transactionId.toString(),
                 platform: "FreeFireCheckout",
                 paymentMethod: "pix",
                 status: "paid",
-                createdAt: new Date(data.created_at).toISOString().slice(0, 19).replace('T', ' '),
+                createdAt: formattedDate,  // Usando a data formatada corretamente
                 approvedDate: new Date().toISOString().slice(0, 19).replace('T', ' '),
                 customer: {
                     name: customer?.name || "Cliente",
@@ -232,7 +242,7 @@ app.post("/webhook/buckpay", async (req, res) => {
                     userCommissionInCents: totalValueInCents || 0
                 },
                 trackingParameters: {
-                    utm_source: data.tracking?.utm_source || "", // Acesso direto do 'data.tracking' do webhook
+                    utm_source: data.tracking?.utm_source || "",
                     utm_medium: data.tracking?.utm_medium || "",
                     utm_campaign: data.tracking?.utm_campaign || "",
                     utm_content: data.tracking?.utm_content || "",
