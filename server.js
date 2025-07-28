@@ -1,12 +1,14 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
+import fetch from "node-fetch"; // 'node-fetch' é uma dependência que precisa ser instalada (npm install node-fetch)
 
 const app = express();
 
 const BUCK_PAY_API_KEY = process.env.BUCK_PAY_API_KEY;
-const BUCK_PAY_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
-// DATABASE_URL não será mais usado, mas pode permanecer na Environment do Render.
+// AJUSTE: A URL base da API BuckPay para criação de transações é /v1/transactions
+// A consulta de status usa /v1/transactions/external_id/:external_id
+const BUCK_PAY_CREATE_TRANSACTION_URL = process.env.BUCK_PAY_URL || "https://api.realtechdev.com.br/v1/transactions";
+const BUCK_PAY_CHECK_STATUS_BASE_URL = "https://api.realtechdev.com.br/v1/transactions/external_id"; // Nova base para consulta por external_id
 
 if (!BUCK_PAY_API_KEY) {
     console.error("Erro: Variável de ambiente BUCK_PAY_API_KEY não configurada no Render.");
@@ -53,22 +55,31 @@ app.post("/create-payment", async (req, res) => {
     }
 
     let cleanPhone = phone ? phone.replace(/\D/g, '') : '';
-    if (cleanPhone.length < 12) {
-        if (cleanPhone.length === 9) {
+    // Corrigindo a lógica do telefone para garantir 55 na frente e 10-11 dígitos após
+    if (cleanPhone.length > 0 && !cleanPhone.startsWith('55')) {
+        // Assume que se não começa com 55, é um número local. Tenta adicionar 55 e DDD
+        // Exemplo: se for 9 dígitos (9XXXX-YYYY), assume DDD 11
+        if (cleanPhone.length === 9) { // Ex: 987654321
             cleanPhone = `5511${cleanPhone}`;
-        } else if (cleanPhone.length === 11) {
-             cleanPhone = `55${cleanPhone}`;
-        } else if (cleanPhone.length < 10) {
-            cleanPhone = "5511987654321"; // Telefone padrão de fallback
+        } else if (cleanPhone.length === 10 || cleanPhone.length === 11) { // Ex: 11987654321 ou 1187654321
+            cleanPhone = `55${cleanPhone}`;
         }
     }
-    cleanPhone = cleanPhone.substring(0, 13); // Garante que não exceda o limite
+    // Caso ainda esteja curto ou seja um número totalmente inválido, usa fallback
+    if (cleanPhone.length < 12) { // 55 + DDD (2 digitos) + Telefone (8 ou 9 digitos) = 12 ou 13
+        cleanPhone = "5511987654321"; // Telefone padrão de fallback
+    }
+    cleanPhone = cleanPhone.substring(0, 13); // Garante que não exceda o limite de 13 (55DD9XXXXXXXX)
+
 
     let offerPayload = null;
     if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
-        offerPayload = { id: "", name: "", discount_price: 0, quantity: 0 };
+        // Se nenhuma informação de oferta foi fornecida, envia null ou um objeto vazio conforme a necessidade da API Buckpay.
+        // A documentação diz "Objeto ou null" para 'offer', mas as sub-propriedades são "Sim String ou null".
+        // Para evitar erros de validação na Buckpay, é mais seguro enviar null se não houver dados válidos.
+        offerPayload = null;
     } else {
-         offerPayload = {
+        offerPayload = {
             id: offer_id || "default_offer_id",
             name: offer_name || "Oferta Padrão",
             discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0,
@@ -81,6 +92,7 @@ app.post("/create-payment", async (req, res) => {
     buckpayTracking.utm_medium = tracking?.utm_medium || 'website';
     buckpayTracking.utm_campaign = tracking?.utm_campaign || 'no_campaign';
     buckpayTracking.src = tracking?.utm_source || 'direct';
+    // É importante que o utm_id e ref contenham o externalId para que você possa recuperá-lo no webhook
     buckpayTracking.utm_id = tracking?.xcod || tracking?.cid || externalId;
     buckpayTracking.ref = tracking?.cid || externalId;
     buckpayTracking.sck = tracking?.sck || 'no_sck_value';
@@ -105,7 +117,7 @@ app.post("/create-payment", async (req, res) => {
     console.log("Payload FINAL enviado para BuckPay:", JSON.stringify(payload, null, 2));
 
     try {
-        const response = await fetch(BUCK_PAY_URL, {
+        const response = await fetch(BUCK_PAY_CREATE_TRANSACTION_URL, { // Usando a URL específica para criação
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -148,41 +160,56 @@ app.post("/create-payment", async (req, res) => {
     }
 });
 
+// Rota de Webhook da BuckPay
 app.post("/webhook/buckpay", async (req, res) => {
     const event = req.body.event;
     const data = req.body.data;
 
-    console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${data.external_id}'`);
+    // --- CORREÇÃO PRINCIPAL AQUI ---
+    // O external_id no webhook não vem como 'data.external_id' diretamente.
+    // Ele vem dentro do objeto 'tracking', como 'tracking.ref' ou 'tracking.utm.id'.
+    let externalIdFromWebhook = null;
+    if (data && data.tracking) {
+        if (data.tracking.ref) {
+            externalIdFromWebhook = data.tracking.ref;
+        } else if (data.tracking.utm && data.tracking.utm.id) {
+            externalIdFromWebhook = data.tracking.utm.id;
+        }
+    }
+    // --- FIM DA CORREÇÃO ---
 
-    // Com esta solução, o backend APENAS LOGA o webhook,
-    // pois não há DB para persistir o status.
-    // O frontend é quem fará a checagem ativa.
+    console.log(`🔔 Webhook BuckPay recebido: Evento '${event}', Status '${data.status}', ID BuckPay: '${data.id}', External ID: '${externalIdFromWebhook}'`);
+
+    // **IMPORTANTE:** Se você planeja persistir o status da transação em um banco de dados
+    // em algum momento, este é o lugar onde você usaria o `externalIdFromWebhook`
+    // para encontrar a transação correspondente no seu DB e atualizar o status (`data.status`).
 
     res.status(200).send("Webhook recebido com sucesso!");
 });
 
 // NOVA ROTA: Consulta o status da transação diretamente na BuckPay
 app.get("/check-order-status", async (req, res) => {
-    const externalId = req.query.id; // Ou `req.query.buckpayId` se você passar o ID da BuckPay
+    const externalId = req.query.id; // O frontend deve passar o `externalId` que você gerou
 
     if (!externalId) {
         return res.status(400).json({ error: "ID externo da transação não fornecido." });
     }
 
     try {
-        // **IMPORTANTE:** O endpoint e o método para consultar o status na BuckPay
-        // podem variar. Você PRECISA verificar a documentação da API da BuckPay
-        // para saber qual é o endpoint correto para consultar status de uma transação.
-        // Vou usar um exemplo genérico aqui:
-        const BUCK_PAY_STATUS_URL = `${BUCK_PAY_URL}/${externalId}`; // Exemplo: GET /v1/transactions/{id}
-        // OU: const BUCK_PAY_STATUS_URL = `${BUCK_PAY_URL}?external_id=${externalId}`; // Exemplo: GET /v1/transactions?external_id={external_id}
+        // --- CORREÇÃO PRINCIPAL AQUI ---
+        // Construindo a URL de consulta de status conforme a documentação:
+        // GET /v1/transactions/external_id/:external_id
+        const BUCK_PAY_STATUS_URL = `${BUCK_PAY_CHECK_STATUS_BASE_URL}/${externalId}`;
+        // --- FIM DA CORREÇÃO ---
+
+        console.log(`Tentando consultar status na BuckPay na URL: ${BUCK_PAY_STATUS_URL}`);
 
         const response = await fetch(BUCK_PAY_STATUS_URL, {
-            method: "GET", // ou "POST" se a API BuckPay exigir para consulta
+            method: "GET",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${BUCK_PAY_API_KEY}`,
-                "User-Agent": "Buckpay API Status Check"
+                "User-Agent": "Buckpay API Status Check" // Diferenciando o User-Agent se desejar
             }
         });
 
@@ -197,11 +224,10 @@ app.get("/check-order-status", async (req, res) => {
         }
 
         const data = await response.json();
-        console.log(`Status BuckPay para ${externalId}:`, data.data?.status);
+        // O retorno da consulta GET /v1/transactions/external_id/:external_id também tem o status dentro de 'data'
+        const statusFromBuckPay = data.data?.status || 'unknown';
 
-        // Adapte 'data.data?.status' para o caminho correto do status na resposta da BuckPay
-        // Por exemplo, pode ser data.status, data.transaction.status, etc.
-        const statusFromBuckPay = data.data?.status || 'unknown'; // Ajuste este caminho
+        console.log(`Status BuckPay para ${externalId}:`, statusFromBuckPay);
 
         res.status(200).json({ success: true, status: statusFromBuckPay });
 
