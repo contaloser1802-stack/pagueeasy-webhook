@@ -21,9 +21,9 @@ const BUCK_PAY_CREATE_TRANSACTION_URL = process.env.BUCK_PAY_URL || "https://api
 // CONFIG UTMify
 
 const UTMIFY_URL = "https://api.utmify.com.br/api-credentials/orders";
-
-const UTMIFY_TOKEN = "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; // <-- Coloque o token REAL da UTMify AQUI
-
+// ALTERADO: O TOKEN DA UTMify DEVE SER CARREGADO DE UMA VARIÁVEL DE AMBIENTE POR SEGURANÇA E MANUTENÇÃO!
+// Antes era hardcoded: "mH3Y79bB6pQKd3aJavkilhVTETVQyDebOhb7"; agora lê de process.env.
+const UTMIFY_TOKEN = process.env.UTMIFY_TOKEN; // <-- AGORA LÊ DA VARIÁVEL DE AMBIENTE
 
 
 if (!BUCK_PAY_API_KEY) {
@@ -34,6 +34,10 @@ if (!BUCK_PAY_API_KEY) {
 
 }
 
+// Adicionado aviso para o token da UTMify
+if (!UTMIFY_TOKEN) {
+    console.warn("Aviso: Variável de ambiente UTMIFY_TOKEN não configurada. A integração com UTMify não funcionará.");
+}
 
 
 // --- ARMAZENAMENTO TEMPORÁRIO EM MEMÓRIA ---
@@ -107,6 +111,11 @@ console.log(`Limpeza de transações agendada a cada ${CLEANUP_INTERVAL_MS / 100
 // --- FUNÇÃO PARA ENVIAR PARA UTMify (Refatorada para reuso) ---
 
 async function sendToUTMify(orderData, externalId, trackingParameters, status, customerData, productData, offerData, gatewayFee) {
+    // Adição de verificação do token UTMify
+    if (!UTMIFY_TOKEN) {
+        console.warn("[UTMify] Aviso: UTMIFY_TOKEN não configurado. Pulando envio para UTMify.");
+        return;
+    }
 
     console.log(`[UTMify] Enviando status '${status}' para orderId: ${externalId}`);
 
@@ -114,14 +123,15 @@ async function sendToUTMify(orderData, externalId, trackingParameters, status, c
 
     // Garante que commission.userCommissionInCents seja pelo menos 1 centavo para 'paid'
 
-    let userCommission = orderData.amountInCents - (gatewayFee || 0);
-
-    if (status === 'paid' && orderData.amountInCents > 0 && userCommission <= 0) {
-
+    let userCommission = (orderData.amountInCents || 0) - (gatewayFee || 0); // Adicionado (orderData.amountInCents || 0)
+    if (status === 'paid' && (orderData.amountInCents || 0) > 0 && userCommission <= 0) { // Adicionado (orderData.amountInCents || 0)
         userCommission = 1;
 
     }
 
+
+    // ALTERADO: A propriedade approvedDate agora será sempre definida, com null se o status não for 'paid'.
+    const approvedDateValue = status === 'paid' ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
 
 
     const bodyForUTMify = {
@@ -136,7 +146,7 @@ async function sendToUTMify(orderData, externalId, trackingParameters, status, c
 
         createdAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
 
-        approvedDate: status === 'paid' ? new Date().toISOString().slice(0, 19).replace('T', ' ') : undefined, // Só preenche se for pago
+        approvedDate: approvedDateValue, // <<-- AQUI ESTÁ A CORREÇÃO
 
         customer: {
 
@@ -381,28 +391,16 @@ app.post("/create-payment", async (req, res) => {
 
 
     // Montagem do payload da oferta, se houver
-
-    let offerPayload = null;
-
-    if (!offer_id && !offer_name && (discount_price === null || discount_price === undefined)) {
-
-        offerPayload = null;
-
-    } else {
-
-        offerPayload = {
-
-            id: offer_id || "default_offer_id",
-
-            name: offer_name || "Oferta Padrão",
-
-            discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0,
-
-            quantity: quantity || 1
-
-        };
-
-    }
+    // ALTERADO: Lógica melhorada: cria o objeto offerPayload se houver qualquer dado de oferta
+    let offerPayload = null;
+    if (offer_id || offer_name || (discount_price !== null && discount_price !== undefined) || quantity) {
+        offerPayload = {
+            id: offer_id || "default_offer_id",
+            name: offer_name || "Oferta Padrão",
+            discount_price: (discount_price !== null && discount_price !== undefined) ? Math.round(parseFloat(discount_price) * 100) : 0,
+            quantity: quantity || 1
+        };
+    }
 
 
 
@@ -675,7 +673,7 @@ app.post("/webhook/buckpay", async (req, res) => {
             transactionInfo.product = data.product || transactionInfo.product;
 
             transactionInfo.offer = data.offer || transactionInfo.offer;
-
+            // ALTERADO: Usa data.amount para garantir que o valor mais recente (do webhook) seja usado
             transactionInfo.amountInCents = data.amount || transactionInfo.amountInCents;
 
 
@@ -696,7 +694,7 @@ app.post("/webhook/buckpay", async (req, res) => {
 
                 await sendToUTMify(
 
-                    { amountInCents: transactionInfo.amountInCents }, // Usar o valor da transação salva ou do webhook
+                    { amountInCents: data.amount }, // ALTERADO: Usar o valor do webhook, que é mais preciso para pagos
 
                     externalIdFromWebhook,
 
@@ -722,7 +720,7 @@ app.post("/webhook/buckpay", async (req, res) => {
 
                 await sendToUTMify(
 
-                    { amountInCents: transactionInfo.amountInCents },
+                    { amountInCents: data.amount }, // ALTERADO: Usa o valor do webhook para status finais
 
                     externalIdFromWebhook,
 
@@ -770,7 +768,7 @@ app.post("/webhook/buckpay", async (req, res) => {
 
                 await sendToUTMify(
 
-                    { amountInCents: data.amount },
+                    { amountInCents: data.amount }, // ALTERADO: Usa o amount direto do webhook
 
                     externalIdFromWebhook,
 
@@ -838,7 +836,7 @@ app.get("/check-order-status", async (req, res) => {
 
         // marcamos como 'expired' em memória e informamos ao frontend.
 
-        // O status 'expired' também pode vir via webhook da BuckPay, mas esta lógica
+        // O status "expired" também pode vir via webhook da BuckPay, mas esta lógica
 
         // garante que o frontend receba essa informação mesmo sem o webhook imediato.
 
